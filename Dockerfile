@@ -15,4 +15,4 @@ RUN npm run build
 
 EXPOSE 3000
 
-CMD ["npm", "start"]
+CMD ["sh", "-c", "npx prisma db push --schema prisma/schema.sqlite.prisma --skip-generate && npm start"]
