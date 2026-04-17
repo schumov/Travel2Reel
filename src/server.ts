@@ -8,6 +8,7 @@ import { mapRouter } from "./routes/mapRoutes";
 import { getMapRouter } from "./routes/getMapRoute";
 import { authRouter } from "./routes/authRoutes";
 import { userRouter } from "./routes/userRoutes";
+import { adminRouter } from "./routes/adminRoutes";
 import { closeMapRenderer } from "./services/mapRenderService";
 import { closeRedis, initRedis } from "./cache/redisClient";
 import { attachGuestUser } from "./middleware/attachGuestUser";
@@ -33,12 +34,17 @@ app.get("/", (_req: Request, res: Response) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
+app.get("/admin", (_req: Request, res: Response) => {
+  res.sendFile(path.join(publicDir, "admin.html"));
+});
+
 app.get("/api/openapi.json", (_req: Request, res: Response) => {
   res.status(200).json(openApiDocument);
 });
 
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(openApiDocument));
 app.use("/auth", authRouter);
+app.use("/admin", adminRouter);
 
 app.use("/api/map", mapRouter);
 app.use("/api", getMapRouter);

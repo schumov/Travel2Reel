@@ -31,6 +31,10 @@ const envSchema = z.object({
   GUEST_SESSION_EXPIRY_DAYS: z.coerce.number().int().positive().default(90),
   GUEST_INACTIVITY_EXPIRY_DAYS: z.coerce.number().int().positive().default(30),
 
+  // Admin
+  ADMIN_USERNAME: z.string().min(1).default("admin"),
+  ADMIN_PASSWORD: z.string().min(1).default("May2026"),
+
   // OpenStreetMap request identity
   OSM_REFERER: z.string().min(1).default("https://example.com"),
   OSM_USER_AGENT: z.string().min(1).default("MapRouteAPI/1.0 (https://example.com; contact@example.com)"),
@@ -44,6 +48,16 @@ const envSchema = z.object({
 export type AppEnv = z.infer<typeof envSchema>;
 
 export const env: AppEnv = envSchema.parse(process.env);
+
+if (
+  env.NODE_ENV === "production" &&
+  (env.ADMIN_USERNAME === "admin" || env.ADMIN_PASSWORD === "May2026")
+) {
+  console.warn(
+    "[admin] WARNING: Default admin credentials are in use in production. " +
+    "Set ADMIN_USERNAME and ADMIN_PASSWORD in your environment."
+  );
+}
 
 export const isGoogleAuthConfigured =
   env.GOOGLE_CLIENT_ID.length > 0 && env.GOOGLE_CLIENT_SECRET.length > 0;

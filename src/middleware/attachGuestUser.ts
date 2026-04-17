@@ -20,11 +20,21 @@ export async function attachGuestUser(req: Request, res: Response, next: NextFun
   }
 
   try {
+    // Check if guest access is globally enabled
+    const guestSetting = await prisma.appSetting.findUnique({ where: { key: "guest_access_enabled" } });
+    if (guestSetting && guestSetting.value === "false") {
+      res.clearCookie(GUEST_COOKIE_NAME);
+      req.guestKey = undefined;
+      req.isGuest = false;
+      next();
+      return;
+    }
+
     const guestUser = await prisma.user.findUnique({
       where: { googleSub: `guest:${guestKey}` }
     });
 
-    if (!guestUser) {
+    if (!guestUser || !guestUser.isEnabled) {
       res.clearCookie(GUEST_COOKIE_NAME);
       req.guestKey = undefined;
       req.isGuest = false;

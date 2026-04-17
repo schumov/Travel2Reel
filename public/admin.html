@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Travel2Reel – Admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #f4f5f7;
+      --card:      #ffffff;
+      --ink:       #1a202c;
+      --muted:     #5a6478;
+      --line:      #e2e8f0;
+      --teal:      #0a8276;
+      --teal-dark: #076b61;
+      --red:       #c00000;
+      --red-dark:  #9a0000;
+      --green:     #0c7a3e;
+      --warn:      #9e4b03;
+      --radius:    8px;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    /* ── NAV ── */
+    .nav {
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+      padding: 0 24px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .nav-brand { font-weight: 700; color: var(--teal); font-size: 1rem; }
+    .nav-brand span { color: var(--muted); font-weight: 400; }
+
+    /* ── LAYOUT ── */
+    .content { max-width: 960px; margin: 32px auto; padding: 0 24px; display: flex; flex-direction: column; gap: 24px; }
+
+    /* ── CARDS ── */
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+    .card-header { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+    .card-title { font-weight: 700; font-size: 0.95rem; }
+    .card-body { padding: 20px; }
+
+    /* ── LOGIN ── */
+    .login-wrap { max-width: 360px; margin: 80px auto; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .form-label { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+    .form-input {
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-input:focus { border-color: var(--teal); }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: var(--radius); font-size: 0.85rem;
+      font-weight: 600; border: none; cursor: pointer; transition: background 0.15s, opacity 0.15s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary   { background: var(--teal); color: #fff; }
+    .btn-primary:hover:not(:disabled)   { background: var(--teal-dark); }
+    .btn-danger    { background: var(--red);  color: #fff; }
+    .btn-danger:hover:not(:disabled)    { background: var(--red-dark); }
+    .btn-ghost     { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+    .btn-ghost:hover:not(:disabled)     { background: var(--bg); }
+    .btn-full      { width: 100%; justify-content: center; }
+
+    /* ── TOGGLE ── */
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; }
+    .toggle-label { display: flex; flex-direction: column; gap: 3px; }
+    .toggle-label-title { font-weight: 600; font-size: 0.9rem; }
+    .toggle-label-sub   { font-size: 0.82rem; color: var(--muted); }
+    .toggle {
+      position: relative; width: 44px; height: 24px; flex-shrink: 0;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0; background: var(--line);
+      border-radius: 24px; cursor: pointer; transition: background 0.2s;
+    }
+    .toggle-slider::before {
+      content: ""; position: absolute; height: 18px; width: 18px;
+      left: 3px; bottom: 3px; background: #fff;
+      border-radius: 50%; transition: transform 0.2s;
+    }
+    .toggle input:checked + .toggle-slider { background: var(--teal); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+    /* ── TABLE ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 10px 14px; font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--line); }
+    td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8fafc; }
+
+    /* ── CHIPS ── */
+    .chip {
+      display: inline-block; padding: 2px 8px; border-radius: 20px;
+      font-size: 0.75rem; font-weight: 600;
+    }
+    .chip-green  { background: #e8f5ee; color: var(--green); }
+    .chip-red    { background: #ffeaea; color: var(--red); }
+    .chip-muted  { background: var(--line); color: var(--muted); }
+    .chip-warn   { background: #fff4ea; color: var(--warn); }
+
+    /* ── ALERTS ── */
+    .alert { padding: 10px 14px; border-radius: var(--radius); font-size: 0.875rem; margin-bottom: 16px; }
+    .alert-error { background: #ffeaea; color: var(--red); }
+    .alert-success { background: #e8f5ee; color: var(--green); }
+
+    /* ── EMPTY ── */
+    .empty { padding: 32px; text-align: center; color: var(--muted); }
+
+    /* ── SPINNER ── */
+    .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── ACTIONS ── */
+    .actions { display: flex; gap: 8px; }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-brand">Travel2Reel <span>/ Admin</span></div>
+    <button id="logout-btn" class="btn btn-ghost" hidden>Logout</button>
+  </nav>
+
+  <!-- LOGIN PANEL -->
+  <div id="login-panel" class="content login-wrap" hidden>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Admin sign in</span></div>
+      <div class="card-body">
+        <div id="login-error" class="alert alert-error" hidden></div>
+        <div class="form-group">
+          <label class="form-label" for="username-input">Username</label>
+          <input id="username-input" class="form-input" type="text" autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="password-input">Password</label>
+          <input id="password-input" class="form-input" type="password" autocomplete="current-password" />
+        </div>
+        <button id="login-btn" class="btn btn-primary btn-full">Sign in</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN PANEL -->
+  <div id="admin-panel" class="content" hidden>
+
+    <!-- Settings -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">⚙️ Settings</span></div>
+      <div class="card-body">
+        <div id="settings-alert" class="alert" hidden></div>
+        <div class="toggle-row">
+          <div class="toggle-label">
+            <span class="toggle-label-title">Guest access</span>
+            <span class="toggle-label-sub">Allow unauthenticated users to continue as guests</span>
+          </div>
+          <label class="toggle">
+            <input id="guest-access-toggle" type="checkbox" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Users -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">👥 Users</span>
+        <button id="reload-users-btn" class="btn btn-ghost">⟳ Reload</button>
+      </div>
+      <div id="users-alert" class="alert" hidden></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Routes</th>
+              <th>Joined</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody">
+            <tr><td colspan="6" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+
+    const loginPanel   = $('login-panel');
+    const adminPanel   = $('admin-panel');
+    const logoutBtn    = $('logout-btn');
+    const loginBtn     = $('login-btn');
+    const loginError   = $('login-error');
+    const usernameInput = $('username-input');
+    const passwordInput = $('password-input');
+    const guestToggle  = $('guest-access-toggle');
+    const settingsAlert = $('settings-alert');
+    const usersTbody   = $('users-tbody');
+    const usersAlert   = $('users-alert');
+
+    function showAlert(el, msg, type) {
+      el.textContent = msg;
+      el.className = `alert alert-${type}`;
+      el.hidden = false;
+      setTimeout(() => { el.hidden = true; }, 4000);
+    }
+
+    function fmtDate(iso) {
+      return new Date(iso).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+    }
+
+    // ── Auth check ──────────────────────────────────────────────────────────
+    async function init() {
+      const res = await fetch('/admin/me');
+      const data = await res.json();
+      if (data.authenticated) {
+        showAdmin();
+      } else {
+        showLogin();
+      }
+    }
+
+    function showLogin() {
+      loginPanel.hidden = false;
+      adminPanel.hidden = true;
+      logoutBtn.hidden  = true;
+    }
+
+    function showAdmin() {
+      loginPanel.hidden = true;
+      adminPanel.hidden = false;
+      logoutBtn.hidden  = false;
+      loadSettings();
+      loadUsers();
+    }
+
+    // ── Login ────────────────────────────────────────────────────────────────
+    loginBtn.addEventListener('click', async () => {
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value;
+      if (!username || !password) {
+        showAlert(loginError, 'Enter username and password.', 'error');
+        return;
+      }
+      loginBtn.disabled = true;
+      loginBtn.innerHTML = '<span class="spin"></span> Signing in…';
+      try {
+        const res = await fetch('/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        if (res.ok) {
+          passwordInput.value = '';
+          showAdmin();
+        } else {
+          const d = await res.json();
+          showAlert(loginError, d.error || 'Login failed.', 'error');
+        }
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Sign in';
+      }
+    });
+
+    passwordInput.addEventListener('keydown', e => { if (e.key === 'Enter') loginBtn.click(); });
+
+    // ── Logout ───────────────────────────────────────────────────────────────
+    logoutBtn.addEventListener('click', async () => {
+      await fetch('/admin/logout', { method: 'POST' });
+      showLogin();
+    });
+
+    // ── Settings ─────────────────────────────────────────────────────────────
+    async function loadSettings() {
+      const res = await fetch('/admin/api/settings');
+      if (!res.ok) return;
+      const data = await res.json();
+      guestToggle.checked = data.guest_access_enabled !== 'false';
+    }
+
+    guestToggle.addEventListener('change', async () => {
+      const value = guestToggle.checked ? 'true' : 'false';
+      const res = await fetch('/admin/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'guest_access_enabled', value })
+      });
+      if (res.ok) {
+        showAlert(settingsAlert, `Guest access ${value === 'true' ? 'enabled' : 'disabled'}.`, 'success');
+      } else {
+        guestToggle.checked = !guestToggle.checked; // revert
+        showAlert(settingsAlert, 'Failed to update setting.', 'error');
+      }
+    });
+
+    // ── Users ────────────────────────────────────────────────────────────────
+    $('reload-users-btn').addEventListener('click', loadUsers);
+
+    async function loadUsers() {
+      usersTbody.innerHTML = '<tr><td colspan="6" class="empty">Loading…</td></tr>';
+      const res = await fetch('/admin/api/users');
+      if (!res.ok) { usersTbody.innerHTML = '<tr><td colspan="6" class="empty">Failed to load users.</td></tr>'; return; }
+      const users = await res.json();
+      if (users.length === 0) {
+        usersTbody.innerHTML = '<tr><td colspan="6" class="empty">No users yet.</td></tr>';
+        return;
+      }
+      usersTbody.innerHTML = users.map(u => `
+        <tr data-id="${u.id}">
+          <td>
+            <div style="font-weight:600">${escHtml(u.displayName)}</div>
+            <div style="color:var(--muted);font-size:0.8rem">${escHtml(u.email)}</div>
+          </td>
+          <td><span class="chip ${u.isGuest ? 'chip-warn' : 'chip-muted'}">${u.isGuest ? 'Guest' : 'Google'}</span></td>
+          <td><span class="chip ${u.isEnabled ? 'chip-green' : 'chip-red'}">${u.isEnabled ? 'Active' : 'Disabled'}</span></td>
+          <td>${u.routeCount}</td>
+          <td style="white-space:nowrap;color:var(--muted)">${fmtDate(u.createdAt)}</td>
+          <td class="actions">
+            <button class="btn btn-ghost toggle-user-btn"
+              data-id="${u.id}" data-enabled="${u.isEnabled}">
+              ${u.isEnabled ? 'Disable' : 'Enable'}
+            </button>
+            <button class="btn btn-danger delete-user-btn"
+              data-id="${u.id}" data-name="${escHtml(u.displayName)}">
+              Delete
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Toggle enable/disable
+    usersTbody.addEventListener('click', async e => {
+      const toggleBtn = e.target.closest('.toggle-user-btn');
+      const deleteBtn = e.target.closest('.delete-user-btn');
+
+      if (toggleBtn) {
+        const id = toggleBtn.dataset.id;
+        const isEnabled = toggleBtn.dataset.enabled === 'true';
+        toggleBtn.disabled = true;
+        const res = await fetch(`/admin/api/users/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isEnabled: !isEnabled })
+        });
+        if (res.ok) {
+          loadUsers();
+        } else {
+          showAlert(usersAlert, 'Failed to update user.', 'error');
+          toggleBtn.disabled = false;
+        }
+      }
+
+      if (deleteBtn) {
+        const id = deleteBtn.dataset.id;
+        const name = deleteBtn.dataset.name;
+        if (!confirm(`Delete user "${name}" and ALL their data? This cannot be undone.`)) return;
+        deleteBtn.disabled = true;
+        const res = await fetch(`/admin/api/users/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          const data = await res.json();
+          const msg = `Deleted "${name}". ${data.sessionsRemoved} session(s) removed.`;
+          showAlert(usersAlert, msg, 'success');
+          loadUsers();
+        } else {
+          showAlert(usersAlert, 'Failed to delete user.', 'error');
+          deleteBtn.disabled = false;
+        }
+      }
+    });
+
+    init();
+  </script>
+
+</body>
+</html>

@@ -26,6 +26,7 @@ model User {
   email       String
   displayName String
   avatarUrl   String?
+  isEnabled   Boolean        @default(true)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
   routeSessions RouteSession[]
@@ -82,4 +83,9 @@ model RouteAsset {
   routeImage   RouteImage? @relation(fields: [routeImageId], references: [id], onDelete: Cascade)
 
   @@index([routeSessionId, assetType])
+}
+
+model AppSetting {
+  key   String @id
+  value String
 }

@@ -9,6 +9,13 @@ const authRouter = Router();
 
 authRouter.post("/guest", async (_req: Request, res: Response, next: NextFunction) => {
   try {
+    // Check if guest access is enabled
+    const guestSetting = await prisma.appSetting.findUnique({ where: { key: "guest_access_enabled" } });
+    if (guestSetting && guestSetting.value === "false") {
+      res.status(403).json({ error: "Guest access is currently disabled" });
+      return;
+    }
+
     const guestKey = randomUUID();
     const googleSub = `guest:${guestKey}`;
 
