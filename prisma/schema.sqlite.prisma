@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum RouteSessionStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum RouteAssetType {
+  ORIGINAL_IMAGE
+  IMAGE_MAP
+  ROUTE_MAP
+  ORIGINAL_VIDEO
+  VIDEO_THUMBNAIL
+}
+
+model User {
+  id          String         @id @default(cuid())
+  googleSub   String         @unique
+  email       String
+  displayName String
+  avatarUrl   String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  routeSessions RouteSession[]
+}
+
+model RouteSession {
+  id          String            @id @default(cuid())
+  userId      String
+  title       String
+  status      RouteSessionStatus @default(ACTIVE)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  completedAt       DateTime?
+  combinedVideoUrl  String?
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images      RouteImage[]
+  assets      RouteAsset[]
+
+  @@index([userId, createdAt])
+}
+
+model RouteImage {
+  id               String      @id @default(cuid())
+  routeSessionId   String
+  orderIndex       Int
+  originalFilename String
+  mimeType         String
+  capturedAt       DateTime?
+  gpsLat           Float?
+  gpsLng           Float?
+  exifJson         String?
+  locationInfoJson String?
+  userNote         String?
+  aiSummary        String?
+  videoUrl         String?
+  hasSourceVideo   Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+  routeSession     RouteSession @relation(fields: [routeSessionId], references: [id], onDelete: Cascade)
+  assets           RouteAsset[]
+
+  @@index([routeSessionId, orderIndex])
+}
+
+model RouteAsset {
+  id           String      @id @default(cuid())
+  routeSessionId String
+  routeImageId String?
+  assetType    RouteAssetType
+  storagePath  String
+  byteSize     Int
+  sha256       String
+  createdAt    DateTime    @default(now())
+  routeSession RouteSession @relation(fields: [routeSessionId], references: [id], onDelete: Cascade)
+  routeImage   RouteImage? @relation(fields: [routeImageId], references: [id], onDelete: Cascade)
+
+  @@index([routeSessionId, assetType])
+}

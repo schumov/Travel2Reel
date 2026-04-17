@@ -1,0 +1,392 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Travel2Reel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+  <!-- NAV BAR -->
+  <nav class="nav-bar">
+    <span class="nav-brand">Travel2Reel</span>
+    <div class="nav-auth">
+      <span id="auth-state" class="nav-auth-label">Not signed in</span>
+      <a id="login-link" class="btn btn-primary" href="/auth/google">Sign in with Google</a>
+      <button id="guest-login-btn" class="btn btn-secondary">Continue as Guest</button>
+      <button id="logout-btn" class="btn btn-ghost" hidden>Logout</button>
+    </div>
+  </nav>
+
+  <!-- HERO TAGLINE -->
+  <div class="hero-tagline">
+    <h1 class="hero-title">Travel2Reel: video generation accelerator for your travel</h1>
+  </div>
+
+  <!-- APP BODY -->
+  <div class="app-body">
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-section-header">
+          <span class="sidebar-section-title">My routes</span>
+          <button id="reload-routes-btn" class="btn btn-icon" title="Reload routes" hidden>&#8635;</button>
+        </div>
+        <div id="saved-routes-empty" class="sidebar-empty">Sign in to load saved routes.</div>
+        <nav id="saved-routes-list" class="route-nav"></nav>
+        <button id="new-session-btn" class="btn btn-secondary sidebar-new-btn" hidden>+ New route</button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+      <!-- WELCOME SCREEN (shown when not logged in) -->
+      <section id="welcome-screen" class="welcome-screen" hidden>
+        <div class="welcome-inner">
+          <div class="welcome-lead">
+            <h2 class="welcome-headline">Turn your travel photos &amp; videos into a shareable reel</h2>
+            <p class="welcome-sub">Upload media, let AI write captions, generate video snippets, and combine them into one polished travel reel — all in one place.</p>
+            <div class="welcome-cta">
+              <a class="btn btn-primary" href="/auth/google">Sign in with Google</a>
+              <button class="btn btn-secondary" onclick="document.getElementById('guest-login-btn').click()">Continue as Guest</button>
+            </div>
+          </div>
+          <div class="welcome-features">
+            <div class="welcome-feature-card">
+              <span class="welcome-feature-icon">📸</span>
+              <h3>Upload &amp; organise</h3>
+              <p>Add photos and videos from your trip. Drag to reorder, add notes, and tag each moment on a map.</p>
+            </div>
+            <div class="welcome-feature-card">
+              <span class="welcome-feature-icon">✍️</span>
+              <h3>AI captions</h3>
+              <p>Generate captions automatically using Claude AI, or write your own. Translate into multiple languages.</p>
+            </div>
+            <div class="welcome-feature-card">
+              <span class="welcome-feature-icon">🎬</span>
+              <h3>Video snippets</h3>
+              <p>Each photo or video becomes an animated clip with motion effects, captions, and custom styling.</p>
+            </div>
+            <div class="welcome-feature-card">
+              <span class="welcome-feature-icon">🗺️</span>
+              <h3>Route map</h3>
+              <p>Visualise your journey on an interactive map with GPS-linked photos plotted along your route.</p>
+            </div>
+            <div class="welcome-feature-card">
+              <span class="welcome-feature-icon">🎞️</span>
+              <h3>Combine into a reel</h3>
+              <p>Merge all your video snippets into one combined travel reel with smooth transitions.</p>
+            </div>
+            <div class="welcome-feature-card">
+              <span class="welcome-feature-icon">☁️</span>
+              <h3>Save &amp; share</h3>
+              <p>Routes and media are saved to your account. Return anytime to continue editing or share your reel.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- EDIT PANEL -->
+      <section id="edit-panel" class="edit-panel">
+        <div class="edit-panel-header">
+          <div class="edit-panel-title-row">
+            <h1 id="active-session" class="edit-panel-title">No active route</h1>
+            <p id="status" class="status-msg" aria-live="polite">No photos loaded.</p>
+          </div>
+          <div class="edit-panel-actions">
+            <label class="btn btn-primary" for="photo-input">Upload photos</label>
+            <input id="photo-input" type="file" accept="image/*,video/*" multiple />
+            <button id="clear-btn" class="btn btn-ghost">Clear</button>
+            <button id="save-changes-btn" class="btn btn-secondary" hidden>&#128190; Save changes</button>
+          </div>
+        </div>
+
+        <!-- PHOTO LIST -->
+        <div class="photos-panel">
+          <div id="photos-empty" class="photos-empty">No photos loaded. Upload images to begin.</div>
+          <div id="photo-list" class="photo-list"></div>
+        </div>
+
+        <!-- BOTTOM PANELS -->
+        <div class="bottom-panels">
+
+          <!-- VIDEO ROUTE PANEL -->
+          <div class="home-panel">
+            <div class="home-panel-header">
+              <h2 class="section-heading">&#127916; Video route</h2>
+            </div>
+            <div class="video-route-body">
+              <div class="video-route-controls-row">
+                <span id="combine-controls" class="combine-controls" hidden>
+                  <select id="combine-transition-select" class="select-sm" title="Transition between clips">
+                    <option value="none">No transition</option>
+                    <option value="fade" selected>Fade</option>
+                    <option value="fadeblack">Fade black</option>
+                    <option value="fadewhite">Fade white</option>
+                    <option value="dissolve">Dissolve</option>
+                    <option value="wipeleft">Wipe left</option>
+                    <option value="wiperight">Wipe right</option>
+                    <option value="wipeup">Wipe up</option>
+                    <option value="wipedown">Wipe down</option>
+                    <option value="slideleft">Slide left</option>
+                    <option value="slideright">Slide right</option>
+                    <option value="slideup">Slide up</option>
+                    <option value="slidedown">Slide down</option>
+                    <option value="circlecrop">Circle crop</option>
+                    <option value="circleopen">Circle open</option>
+                    <option value="circleclose">Circle close</option>
+                  </select>
+                  <input id="combine-transition-duration" type="number" class="input-sm" value="0.5" min="0" max="3" step="0.1" title="Transition duration (seconds)" />
+                  <button id="combine-video-btn" class="btn btn-secondary">&#127916; Combine videos</button>
+                </span>
+                <span id="combine-video-state" class="status-chip"></span>
+              </div>
+              <div id="combined-video-section" class="video-route-result" hidden>
+                <a id="combined-video-link" class="video-result-link" href="#" target="_blank" rel="noopener noreferrer" hidden>&#9654; Watch combined video</a>
+              </div>
+            </div>
+          </div>
+
+          <!-- ROUTE PREVIEW PANEL -->
+          <div class="home-panel">
+            <div class="home-panel-header">
+              <h2 class="section-heading">Route preview</h2>
+              <div class="home-panel-actions">
+                <button id="route-btn" class="btn btn-primary">Generate route</button>
+                <button id="regenerate-route-btn" class="btn btn-secondary" hidden>&#8635; Regenerate route</button>
+                <a id="download-route-link" class="btn btn-outline btn-disabled" href="#" download="ordered-route.png">Download PNG</a>
+              </div>
+            </div>
+            <div id="route-stale-banner" class="route-stale-banner" hidden>
+              &#9888; Photos changed — route may be outdated.
+            </div>
+            <div id="route-preview-empty" class="route-preview-empty">No route generated yet.</div>
+            <div class="route-preview-wrap">
+              <img id="route-preview" alt="Route preview map" hidden />
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- CONFIRMATION DIALOG -->
+  <div id="confirm-dialog-backdrop" class="confirm-backdrop" hidden>
+    <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-message">
+      <p id="confirm-dialog-message" class="confirm-message"></p>
+      <div class="confirm-actions">
+        <button id="confirm-dialog-cancel" class="btn btn-ghost">Cancel</button>
+        <button id="confirm-dialog-ok" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT MEDIA OVERLAY -->
+  <div id="edit-photo-overlay" class="edit-photo-overlay" hidden>
+
+    <nav class="edit-photo-nav">
+      <div class="edit-photo-nav-left">
+        <button id="edit-close-btn" class="btn btn-ghost">&#8592; Back</button>
+        <span class="edit-photo-title">Edit media</span>
+        <span id="edit-photo-filename" class="edit-photo-filename"></span>
+      </div>
+    </nav>
+
+    <div class="edit-photo-body">
+
+      <!-- INFO BANNER -->
+      <div class="edit-info-banner">
+        <span class="edit-info-banner-icon">&#8505;&#65039;</span>
+        <span>You can generate a video snippet only if captions are available. Captions can be written or generated with AI based on your notes and Map info if available.</span>
+      </div>
+
+      <div class="photo-details-grid">
+
+        <!-- LEFT: photo + note panel -->
+        <div class="photo-details-col photo-details-left">
+          <div class="detail-thumb-wrap">
+            <img id="edit-photo-thumb" alt="Photo thumbnail" />
+          </div>
+          <p id="edit-photo-meta" class="detail-meta"></p>
+          <a id="edit-source-video-link" class="video-link" href="#" target="_blank" rel="noopener noreferrer" hidden>&#9654; Play source video</a>
+          <p id="edit-persist-state" class="detail-persist"></p>
+
+          <div class="edit-panel">
+            <label class="field-label">Your note</label>
+            <textarea id="edit-note-input" class="field-textarea" rows="5"
+              placeholder="Add your note for this photo..."></textarea>
+            <div class="panel-actions">
+              <span id="edit-note-state" class="status-chip"></span>
+              <button id="edit-save-note-btn" class="btn btn-secondary">Save note</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- MIDDLE: map + AI summary panel -->
+        <div class="photo-details-col photo-details-middle">
+          <div class="detail-map-wrap">
+            <div id="edit-map-placeholder" class="detail-map-placeholder">Map not generated yet.</div>
+            <img id="edit-map-img" alt="Map" hidden />
+          </div>
+
+          <div class="edit-panel">
+            <label class="field-label">Captions</label>
+            <textarea id="edit-summary-input" class="field-textarea" rows="6"
+              placeholder="Captions will appear here..."></textarea>
+            <div class="panel-actions">
+              <span id="edit-summary-state" class="status-chip"></span>
+              <button id="edit-generate-summary-btn" class="btn btn-secondary">Generate captions with AI</button>
+              <button id="edit-save-summary-btn" class="btn btn-secondary" hidden>Save captions</button>
+              <select id="edit-translate-lang-select" class="nav-lang-select">
+                <option value="german">German</option>
+                <option value="spanish">Spanish</option>
+                <option value="bulgarian">Bulgarian</option>
+              </select>
+              <button id="edit-translate-summary-btn" class="btn btn-secondary">&#127760; Translate</button>
+            </div>
+          </div>
+
+          <div id="edit-video-section" class="edit-panel" hidden>
+            <label class="field-label">Generated video</label>
+            <div class="video-gen-controls">
+              <div class="video-gen-option">
+                <label class="option-label" for="edit-video-effect-select">Effect</label>
+                <select id="edit-video-effect-select" class="select-sm">
+                  <option value="none">No effect</option>
+                  <option value="zoom-in">Zoom in</option>
+                  <option value="zoom-out">Zoom out</option>
+                  <option value="pan-right">Pan right</option>
+                  <option value="pan-left">Pan left</option>
+                  <option value="ken-burns">Ken Burns</option>
+                  <option value="shake">Shake</option>
+                </select>
+              </div>
+              <div class="video-gen-option">
+                <label class="option-label" for="edit-video-caption-position-select">Caption position</label>
+                <select id="edit-video-caption-position-select" class="select-sm">
+                  <option value="bottom">Bottom</option>
+                  <option value="center">Center</option>
+                  <option value="top">Top</option>
+                </select>
+              </div>
+              <div class="video-gen-option">
+                <label class="option-label" for="edit-video-caption-style-select">Caption style</label>
+                <select id="edit-video-caption-style-select" class="select-sm">
+                  <option value="word-by-word">Word by word</option>
+                  <option value="karaoke">Karaoke</option>
+                </select>
+              </div>
+              <div class="video-gen-option">
+                <label class="option-label" for="edit-video-font-size-input">Font size</label>
+                <input id="edit-video-font-size-input" type="number" class="input-sm"
+                  placeholder="default" min="8" max="120" step="1" style="width:72px" />
+              </div>
+              <button id="edit-generate-video-btn" class="btn btn-secondary">&#127916; Generate video</button>
+              <span id="edit-video-state" class="status-chip"></span>
+            </div>
+            <a id="edit-video-link" class="video-link" href="#" target="_blank" rel="noopener noreferrer" hidden>&#9654; Watch video</a>
+          </div>
+          <p id="edit-card-status" class="detail-card-status" aria-live="polite"></p>
+        </div>
+
+        <!-- RIGHT: location info -->
+        <div class="photo-details-col photo-details-right">
+          <h2 class="section-heading">Map info</h2>
+          <div id="edit-info-placeholder" class="info-placeholder">No location info loaded.</div>
+          <div id="edit-info-content" class="info-content" hidden></div>
+          <div class="detail-map-actions">
+            <button id="edit-map-btn" class="btn btn-secondary">Generate map</button>
+            <button id="edit-info-btn" class="btn btn-secondary">Get location info</button>
+            <button id="edit-pick-location-btn" class="btn btn-secondary">&#128205; Pick location</button>
+          </div>
+          <div id="edit-location-picker" class="location-picker" hidden>
+            <p class="location-picker-hint">Click the map to pin a location, then save.</p>
+            <div id="edit-location-map" class="location-picker-map"></div>
+            <p id="edit-location-coords" class="location-picker-coords">No location selected</p>
+            <div class="location-picker-actions">
+              <button id="edit-save-location-btn" class="btn btn-primary" disabled>Save location</button>
+              <button id="edit-cancel-location-btn" class="btn btn-ghost">Cancel</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Hidden inputs kept for JS compatibility -->
+    <input id="edit-source-video-input" type="file" accept="video/*" hidden />
+    <span id="edit-source-video-name" hidden></span>
+    <span id="edit-source-video-state" hidden></span>
+  </div>
+
+  <!-- PHOTO ROW TEMPLATE -->
+  <template id="photo-row-template">
+    <div class="photo-row" draggable="true">
+
+      <div class="photo-row-col col-actions">
+        <button class="btn btn-icon edit-btn" title="Edit media">&#9998;</button>
+        <button class="btn btn-icon btn-danger remove-btn" title="Remove">&#10005;</button>
+      </div>
+
+      <div class="photo-row-col col-thumb">
+        <div class="row-thumb-wrap">
+          <img class="thumb" alt="Photo thumbnail" />
+        </div>
+      </div>
+
+      <div class="photo-row-col col-meta">
+        <p class="row-filename name"></p>
+        <p class="row-detail small size"></p>
+        <p class="row-detail small persist-state"></p>
+        <p class="row-detail card-status" aria-live="polite"></p>
+      </div>
+
+      <div class="photo-row-col col-note">
+        <label class="field-label">Your note</label>
+        <textarea class="field-textarea note-input" rows="3"
+          placeholder="Add your note..."></textarea>
+        <div class="row-note-footer">
+          <button class="btn btn-secondary note-save-btn">Save note</button>
+          <span class="note-state status-chip"></span>
+        </div>
+      </div>
+
+      <div class="photo-row-col col-map">
+        <div class="row-map-wrap">
+          <div class="map-placeholder-small">No map</div>
+          <img class="map-img" alt="Map" hidden />
+        </div>
+        <div class="row-map-actions">
+          <button class="btn btn-ghost map-btn">Generate map</button>
+          <button class="btn btn-ghost info-btn">Get info</button>
+        </div>
+      </div>
+
+      <div class="photo-row-col col-info">
+        <div class="info-placeholder small">No location info</div>
+        <div class="info-content small" hidden></div>
+      </div>
+
+      <div class="photo-row-col col-summary">
+        <span class="summary-state status-chip"></span>
+        <div class="summary-text" hidden></div>
+        <button class="btn btn-ghost summary-btn">Captions</button>
+        <a class="video-row-link" href="#" target="_blank" rel="noopener noreferrer" hidden>&#9654; Video</a>
+      </div>
+
+    </div>
+  </template>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>
