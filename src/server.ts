@@ -19,6 +19,7 @@ const app = express();
 const port = env.PORT;
 const publicDir = path.join(process.cwd(), "public");
 
+app.set("trust proxy", 1);
 app.use(express.static(publicDir));
 app.use(express.json());
 app.use(sessionMiddleware);
