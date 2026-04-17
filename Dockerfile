@@ -3,6 +3,7 @@ FROM node:20-bookworm-slim AS base
 WORKDIR /app
 
 COPY package*.json ./
+COPY prisma ./prisma
 RUN npm ci
 
 COPY tsconfig.json ./
