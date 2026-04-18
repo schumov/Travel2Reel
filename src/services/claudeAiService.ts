@@ -29,7 +29,21 @@ function getClaudeClient(): Anthropic {
   return claudeClient;
 }
 
-export async function generateImageSummary(input: SummaryInput): Promise<string> {
+export const DEFAULT_CAPTION_PROMPT = `You are a concise travel captions generator. Based on the following information about a photo and location, generate a brief, engaging human-readable summary in 1-2 sentences. The summary will be used as a video caption and should be interesting and capture the essence of the moment or location.
+
+Information provided:
+{{context}}
+
+Requirements:
+- Write in 1-2 sentences maximum
+- Be engaging and emotional if possible, not just factual
+- Focus on the location and moment captured
+- If Traveller notes are provided, incorporate relevant details
+- Write in first or second person perspective as if describing the moment. Use "my" or "our" if it fits the context.
+
+Generate the captions now:`;
+
+export async function generateImageSummary(input: SummaryInput, promptTemplate?: string): Promise<string> {
   const client = getClaudeClient();
 
   // Build context string from available information
@@ -62,20 +76,8 @@ export async function generateImageSummary(input: SummaryInput): Promise<string>
   }
 
   const contextString = contextParts.join("\n");
-
-  const prompt = `You are a concise travel captions generator. Based on the following information about a photo and location, generate a brief, engaging human-readable summary in 1-2 sentences. The summary will be used as a video caption andshould be interesting and capture the essence of the moment or location.
-
-Information provided:
-${contextString}
-
-Requirements:
-- Write in 1-2 sentences maximum
-- Be engaging and emotional if possible, not just factual
-- Focus on the location and moment captured
-- If Traveller notes are provided, incorporate relevant details
-- Write in first or second person perspective as if describing the moment. Use "my" or "our" if it fits the context.
-
-Generate the captions now:`;
+  const template = promptTemplate ?? DEFAULT_CAPTION_PROMPT;
+  const prompt = template.replace("{{context}}", contextString);
 
   const message = await client.messages.create({
     model: env.ANTHROPIC_MODEL,

@@ -137,6 +137,20 @@
 
     /* ── ACTIONS ── */
     .actions { display: flex; gap: 8px; }
+
+    /* ── PROMPT EDITOR ── */
+    .prompt-textarea {
+      width: 100%; min-height: 220px; padding: 10px 12px;
+      border: 1px solid var(--line); border-radius: var(--radius);
+      font-family: ui-monospace, monospace; font-size: 0.82rem; line-height: 1.5;
+      resize: vertical; outline: none; transition: border-color 0.15s;
+    }
+    .prompt-textarea:focus { border-color: var(--teal); }
+    .prompt-meta { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+    .prompt-chars { font-size: 0.78rem; color: var(--muted); }
+    .prompt-actions { display: flex; gap: 8px; }
+    .prompt-hint { font-size: 0.8rem; color: var(--muted); margin-bottom: 10px; }
+    .prompt-hint code { background: var(--line); padding: 1px 5px; border-radius: 4px; font-size: 0.78rem; }
   </style>
 </head>
 <body>
@@ -186,6 +200,26 @@
       </div>
     </div>
 
+    <!-- AI Caption Prompt -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">🤖 AI Caption Prompt</span></div>
+      <div class="card-body">
+        <div id="prompt-alert" class="alert" hidden></div>
+        <p class="prompt-hint">
+          Use <code>{{context}}</code> as the placeholder where photo information (filename, location, notes) will be inserted.
+          If omitted, the context is appended at the end automatically.
+        </p>
+        <textarea id="prompt-textarea" class="prompt-textarea" maxlength="4000" spellcheck="false"></textarea>
+        <div class="prompt-meta">
+          <span id="prompt-chars" class="prompt-chars">0 / 4000</span>
+          <div class="prompt-actions">
+            <button id="prompt-reset-btn" class="btn btn-ghost">↺ Reset to default</button>
+            <button id="prompt-save-btn" class="btn btn-primary">Save prompt</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Users -->
     <div class="card">
       <div class="card-header">
@@ -226,6 +260,11 @@
     const passwordInput = $('password-input');
     const guestToggle  = $('guest-access-toggle');
     const settingsAlert = $('settings-alert');
+    const promptTextarea = $('prompt-textarea');
+    const promptChars    = $('prompt-chars');
+    const promptSaveBtn  = $('prompt-save-btn');
+    const promptResetBtn = $('prompt-reset-btn');
+    const promptAlert    = $('prompt-alert');
     const usersTbody   = $('users-tbody');
     const usersAlert   = $('users-alert');
 
@@ -262,6 +301,7 @@
       adminPanel.hidden = false;
       logoutBtn.hidden  = false;
       loadSettings();
+      loadPrompt();
       loadUsers();
     }
 
@@ -322,6 +362,64 @@
       } else {
         guestToggle.checked = !guestToggle.checked; // revert
         showAlert(settingsAlert, 'Failed to update setting.', 'error');
+      }
+    });
+
+    // ── Prompt editor ────────────────────────────────────────────────────────
+    async function loadPrompt() {
+      const res = await fetch('/admin/api/prompt');
+      if (!res.ok) return;
+      const data = await res.json();
+      promptTextarea.value = data.value;
+      updatePromptChars();
+    }
+
+    function updatePromptChars() {
+      const len = promptTextarea.value.length;
+      promptChars.textContent = `${len} / 4000`;
+      promptChars.style.color = len > 3800 ? 'var(--warn)' : '';
+    }
+
+    promptTextarea.addEventListener('input', updatePromptChars);
+
+    promptSaveBtn.addEventListener('click', async () => {
+      const value = promptTextarea.value;
+      if (!value.trim()) { showAlert(promptAlert, 'Prompt cannot be empty.', 'error'); return; }
+      promptSaveBtn.disabled = true;
+      promptSaveBtn.innerHTML = '<span class="spin"></span> Saving…';
+      try {
+        const res = await fetch('/admin/api/prompt', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value })
+        });
+        if (res.ok) {
+          showAlert(promptAlert, 'Prompt saved.', 'success');
+        } else {
+          const d = await res.json();
+          showAlert(promptAlert, d.error || 'Failed to save prompt.', 'error');
+        }
+      } finally {
+        promptSaveBtn.disabled = false;
+        promptSaveBtn.textContent = 'Save prompt';
+      }
+    });
+
+    promptResetBtn.addEventListener('click', async () => {
+      if (!confirm('Reset the prompt to the built-in default? Your custom prompt will be deleted.')) return;
+      promptResetBtn.disabled = true;
+      try {
+        const res = await fetch('/admin/api/prompt', { method: 'DELETE' });
+        if (res.ok) {
+          const data = await res.json();
+          promptTextarea.value = data.value;
+          updatePromptChars();
+          showAlert(promptAlert, 'Prompt reset to default.', 'success');
+        } else {
+          showAlert(promptAlert, 'Failed to reset prompt.', 'error');
+        }
+      } finally {
+        promptResetBtn.disabled = false;
       }
     });
 

@@ -812,12 +812,13 @@ userRouter.post(
         }
       }
 
-      // Generate summary using Claude AI
+      // Generate summary using Claude AI — use custom prompt from DB if set
+      const promptSetting = await prisma.appSetting.findUnique({ where: { key: "caption_prompt" } });
       const summary = await generateImageSummary({
         userNote: image.userNote,
         locationInfo,
         originalFilename: image.originalFilename
-      });
+      }, promptSetting?.value ?? undefined);
 
       // Save summary to database
       const updatedImage = await prisma.routeImage.update({
