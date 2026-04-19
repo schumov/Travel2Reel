@@ -13,6 +13,7 @@ interface SummaryInput {
   userNote: string | null | undefined;
   locationInfo: LocationInfo | null | undefined;
   originalFilename: string;
+  imageAnalysis?: string | null;
 }
 
 let claudeClient: Anthropic | null = null;
@@ -73,6 +74,10 @@ export async function generateImageSummary(input: SummaryInput, promptTemplate?:
 
   if (input.userNote) {
     contextParts.push(`Traveller note: ${input.userNote}`);
+  }
+
+  if (input.imageAnalysis) {
+    contextParts.push(`Image analysis: ${input.imageAnalysis}`);
   }
 
   const contextString = contextParts.join("\n");

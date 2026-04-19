@@ -1154,6 +1154,11 @@ async function markItemsByUploadResult(payload, localFiles) {
       // Apply image analysis result from upload response
       item.imageAnalysis = img.imageAnalysis || null;
 
+      // Apply AI-generated caption from upload response
+      if (img.aiSummary) {
+        item.aiSummary = img.aiSummary;
+      }
+
       continue;
     }
     const reason = failedMap.get(file.name);

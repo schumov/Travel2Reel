@@ -340,16 +340,28 @@ userRouter.post(
           const gps = await tryExtractGpsCoordinates(file.buffer);
           const exifPayload = await exifr.parse(file.buffer).catch(() => null);
 
-          const locationInfo = gps
-            ? await fetchLocationInfo(gps).catch(() => ({ gps, displayName: "Unknown location" }))
-            : null;
-
           const capturedDate = exifPayload && (exifPayload as { DateTimeOriginal?: Date; CreateDate?: Date }).DateTimeOriginal
             ? (exifPayload as { DateTimeOriginal?: Date }).DateTimeOriginal
             : exifPayload && (exifPayload as { CreateDate?: Date }).CreateDate
               ? (exifPayload as { CreateDate?: Date }).CreateDate
               : null;
 
+          // Fetch settings once for both analysis URL and caption prompt
+          const [analysisSetting, promptSetting] = await Promise.all([
+            prisma.appSetting.findUnique({ where: { key: "image_analysis_api_url" } }),
+            prisma.appSetting.findUnique({ where: { key: "caption_prompt" } })
+          ]);
+          const analysisApiUrl = analysisSetting?.value ?? DEFAULT_IMAGE_ANALYSIS_URL;
+
+          // Phase 1 — parallel: location info + image analysis (neither needs a DB record yet)
+          const [locationInfo, imageAnalysis] = await Promise.all([
+            gps
+              ? fetchLocationInfo(gps).catch(() => ({ gps, displayName: "Unknown location" }))
+              : Promise.resolve(null),
+            analyzeImage(processed.buffer, processedMimeType, analysisApiUrl)
+          ]);
+
+          // Create DB record with all available context from phase 1
           const createdImage = await prisma.routeImage.create({
             data: {
               routeSessionId: routeSession.id,
@@ -385,48 +397,64 @@ userRouter.post(
 
           const imageAssets: unknown[] = [{ ...originalAssetRow, url: assetUrl(originalAssetRow.id) }];
 
-          if (gps) {
-            const mapBuffer = await renderMapPng({
-              lat: gps.lat,
-              lng: gps.lng,
-              zoom: 13,
-              width: 460,
-              height: 280
-            });
+          // Phase 2 — parallel: map rendering + caption generation
+          // Both can run concurrently since they are independent of each other
+          const mapTask = gps
+            ? (async () => {
+                const mapBuffer = await renderMapPng({
+                  lat: gps.lat,
+                  lng: gps.lng,
+                  zoom: 13,
+                  width: 460,
+                  height: 280
+                });
+                const mapAsset = await saveAssetFile({
+                  routeSessionId: routeSession.id,
+                  assetType: ASSET_TYPE.IMAGE_MAP,
+                  mimeType: "image/png",
+                  buffer: mapBuffer
+                });
+                const mapAssetRow = await prisma.routeAsset.create({
+                  data: {
+                    routeSessionId: routeSession.id,
+                    routeImageId: createdImage.id,
+                    assetType: ASSET_TYPE.IMAGE_MAP,
+                    storagePath: mapAsset.relativePath,
+                    byteSize: mapAsset.byteSize,
+                    sha256: mapAsset.sha256
+                  }
+                });
+                return mapAssetRow;
+              })().catch(() => null)
+            : Promise.resolve(null);
 
-            const mapAsset = await saveAssetFile({
-              routeSessionId: routeSession.id,
-              assetType: ASSET_TYPE.IMAGE_MAP,
-              mimeType: "image/png",
-              buffer: mapBuffer
-            });
+          const captionTask = isClaudeAiConfigured
+            ? generateImageSummary({
+                userNote: notesByIndex[fileIndex] || null,
+                locationInfo,
+                originalFilename: file.originalname,
+                imageAnalysis
+              }, promptSetting?.value ?? undefined).catch(() => null)
+            : Promise.resolve(null);
 
-            const mapAssetRow = await prisma.routeAsset.create({
-              data: {
-                routeSessionId: routeSession.id,
-                routeImageId: createdImage.id,
-                assetType: ASSET_TYPE.IMAGE_MAP,
-                storagePath: mapAsset.relativePath,
-                byteSize: mapAsset.byteSize,
-                sha256: mapAsset.sha256
-              }
-            });
+          const [mapAssetRow, aiSummary] = await Promise.all([mapTask, captionTask]);
 
+          if (mapAssetRow) {
             imageAssets.push({ ...mapAssetRow, url: assetUrl(mapAssetRow.id) });
           }
 
-          // Auto-analyze image if an analysis API URL is configured
-          const analysisSetting = await prisma.appSetting.findUnique({ where: { key: "image_analysis_api_url" } });
-          const analysisApiUrl = analysisSetting?.value ?? DEFAULT_IMAGE_ANALYSIS_URL;
-          const imageAnalysis = await analyzeImage(processed.buffer, processedMimeType, analysisApiUrl);
-          const imageWithAnalysis = imageAnalysis
+          // Single DB update with analysis result and generated captions
+          const finalImage = (imageAnalysis !== null || aiSummary !== null)
             ? await prisma.routeImage.update({
                 where: { id: createdImage.id },
-                data: { imageAnalysis }
+                data: {
+                  ...(imageAnalysis !== null ? { imageAnalysis } : {}),
+                  ...(aiSummary !== null ? { aiSummary } : {})
+                }
               })
             : createdImage;
 
-          uploadedImages.push({ image: imageWithAnalysis, assets: imageAssets });
+          uploadedImages.push({ image: finalImage, assets: imageAssets });
 
           orderIndex += 1;
         } catch (error) {
@@ -829,7 +857,8 @@ userRouter.post(
       const summary = await generateImageSummary({
         userNote: image.userNote,
         locationInfo,
-        originalFilename: image.originalFilename
+        originalFilename: image.originalFilename,
+        imageAnalysis: (image as any).imageAnalysis ?? null
       }, promptSetting?.value ?? undefined);
 
       // Save summary to database
