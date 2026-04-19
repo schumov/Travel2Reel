@@ -1159,6 +1159,12 @@ async function markItemsByUploadResult(payload, localFiles) {
         item.aiSummary = img.aiSummary;
       }
 
+      // Apply auto-generated video URL from upload response
+      if (img.videoUrl) {
+        item.videoUrl = img.videoUrl;
+        item.videoStatus = "Ready";
+      }
+
       continue;
     }
     const reason = failedMap.get(file.name);

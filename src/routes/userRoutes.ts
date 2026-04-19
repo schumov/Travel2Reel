@@ -57,6 +57,8 @@ async function videoGenFetch(endpoint: string, init: RequestInit): Promise<globa
   console[level](`[video-gen] <-- ${response.status} ${response.statusText}  (${elapsed} ms)  ${url}`);
   return response;
 }
+const VALID_VIDEO_EFFECTS = ["none", "zoom-in", "zoom-out", "pan-left", "pan-right", "ken-burns", "shake"] as const;
+
 const ASSET_TYPE = {
   ORIGINAL_IMAGE: "ORIGINAL_IMAGE",
   IMAGE_MAP: "IMAGE_MAP",
@@ -444,7 +446,7 @@ userRouter.post(
           }
 
           // Single DB update with analysis result and generated captions
-          const finalImage = (imageAnalysis !== null || aiSummary !== null)
+          let finalImage: typeof createdImage = (imageAnalysis !== null || aiSummary !== null)
             ? await prisma.routeImage.update({
                 where: { id: createdImage.id },
                 data: {
@@ -453,6 +455,42 @@ userRouter.post(
                 }
               })
             : createdImage;
+
+          // Phase 3 — auto-generate video if service is configured and a caption is available
+          if (isVideoGenConfigured && aiSummary) {
+            try {
+              const randomEffect = VALID_VIDEO_EFFECTS[Math.floor(Math.random() * VALID_VIDEO_EFFECTS.length)];
+              const videoFormData = new FormData();
+              const imageBlob = new Blob([new Uint8Array(processed.buffer.buffer as ArrayBuffer, processed.buffer.byteOffset, processed.buffer.byteLength)], { type: processedMimeType });
+              videoFormData.append("image", imageBlob, file.originalname);
+              videoFormData.append("text", aiSummary.trim());
+              videoFormData.append("effect", randomEffect);
+              videoFormData.append("captionPosition", "bottom");
+              videoFormData.append("captionStyle", "word-by-word");
+              videoFormData.append("fontSize", "10");
+
+              const videoResponse = await videoGenFetch("/generate", {
+                method: "POST",
+                body: videoFormData,
+                headers: env.VIDEO_GEN_API_TOKEN ? { token: env.VIDEO_GEN_API_TOKEN } : {},
+                signal: AbortSignal.timeout(120_000)
+              });
+
+              if (videoResponse.ok) {
+                const videoPayload = await videoResponse.json() as { success: boolean; url: string };
+                if (videoPayload.success && videoPayload.url) {
+                  finalImage = await prisma.routeImage.update({
+                    where: { id: createdImage.id },
+                    data: { videoUrl: videoPayload.url }
+                  });
+                }
+              } else {
+                console.warn(`[upload] Auto-video generation failed for ${file.originalname}: ${videoResponse.status}`);
+              }
+            } catch (videoErr) {
+              console.warn(`[upload] Auto-video generation error for ${file.originalname}:`, videoErr);
+            }
+          }
 
           uploadedImages.push({ image: finalImage, assets: imageAssets });
 
@@ -1052,9 +1090,8 @@ userRouter.post(
       // Build multipart form and call the external video-gen API
       console.log("[video] received body:", JSON.stringify(req.body));
 
-      const VALID_EFFECTS = ["none", "zoom-in", "zoom-out", "pan-left", "pan-right", "ken-burns", "shake"];
       const rawEffect = typeof req.body?.effect === "string" ? req.body.effect.trim() : "none";
-      const effect = VALID_EFFECTS.includes(rawEffect) ? rawEffect : "none";
+      const effect = VALID_VIDEO_EFFECTS.includes(rawEffect as any) ? rawEffect : "none";
 
       const VALID_CAPTION_POSITIONS = ["top", "center", "bottom"];
       const rawCaption = typeof req.body?.captionPosition === "string" ? req.body.captionPosition.trim() : "bottom";
@@ -1341,10 +1378,9 @@ userRouter.post(
       formData.append("video", blob, `source${ext || ".mp4"}`);
       formData.append("text", image.aiSummary.trim());
 
-      const VALID_EFFECTS_V = ["none", "zoom-in", "zoom-out", "pan-left", "pan-right", "ken-burns", "shake"];
       console.log("[video-from-video] received body:", JSON.stringify(req.body));
       const rawEffectV = typeof req.body?.effect === "string" ? req.body.effect.trim() : "none";
-      formData.append("effect", VALID_EFFECTS_V.includes(rawEffectV) ? rawEffectV : "none");
+      formData.append("effect", VALID_VIDEO_EFFECTS.includes(rawEffectV as any) ? rawEffectV : "none");
 
       const VALID_POSITIONS_V = ["top", "center", "bottom"];
       const rawPositionV = typeof req.body?.captionPosition === "string" ? req.body.captionPosition.trim() : "bottom";
