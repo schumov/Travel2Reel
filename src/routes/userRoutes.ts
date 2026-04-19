@@ -18,6 +18,7 @@ import {
 } from "../services/storageService";
 import { processImage } from "../services/imageService";
 import { generateImageSummary, translateText, type TranslationLanguage } from "../services/claudeAiService";
+import { analyzeImage, DEFAULT_IMAGE_ANALYSIS_URL } from "../services/imageAnalysisService";
 import { isClaudeAiConfigured, isVideoGenConfigured, env } from "../config/env";
 import { HttpError } from "../utils/validators";
 import { extractVideoThumbnail } from "../services/videoThumbnailService";
@@ -414,7 +415,18 @@ userRouter.post(
             imageAssets.push({ ...mapAssetRow, url: assetUrl(mapAssetRow.id) });
           }
 
-          uploadedImages.push({ image: createdImage, assets: imageAssets });
+          // Auto-analyze image if an analysis API URL is configured
+          const analysisSetting = await prisma.appSetting.findUnique({ where: { key: "image_analysis_api_url" } });
+          const analysisApiUrl = analysisSetting?.value ?? DEFAULT_IMAGE_ANALYSIS_URL;
+          const imageAnalysis = await analyzeImage(processed.buffer, processedMimeType, analysisApiUrl);
+          const imageWithAnalysis = imageAnalysis
+            ? await prisma.routeImage.update({
+                where: { id: createdImage.id },
+                data: { imageAnalysis }
+              })
+            : createdImage;
+
+          uploadedImages.push({ image: imageWithAnalysis, assets: imageAssets });
 
           orderIndex += 1;
         } catch (error) {

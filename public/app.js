@@ -92,6 +92,8 @@ const elements = {
   editLocationCoords:       document.getElementById("edit-location-coords"),
   editSaveLocationBtn:      document.getElementById("edit-save-location-btn"),
   editCancelLocationBtn:    document.getElementById("edit-cancel-location-btn"),
+  editAnalysisContent:      document.getElementById("edit-analysis-content"),
+  editAnalysisPlaceholder:  document.getElementById("edit-analysis-placeholder"),
   // Auth-gated panels
   welcomeScreen:            document.getElementById("welcome-screen"),
   editPanel:                document.getElementById("edit-panel")
@@ -704,6 +706,16 @@ function openEditPhoto(itemId) {
     elements.editInfoPlaceholder.hidden = false;
   }
 
+  // Image analysis (read-only)
+  if (item.imageAnalysis) {
+    elements.editAnalysisContent.textContent = item.imageAnalysis;
+    elements.editAnalysisContent.hidden = false;
+    elements.editAnalysisPlaceholder.hidden = true;
+  } else {
+    elements.editAnalysisContent.hidden = true;
+    elements.editAnalysisPlaceholder.hidden = false;
+  }
+
   // Map/info action buttons — always enabled; getItemImageBody() handles restored items
   elements.editMapBtn.disabled = false;
   elements.editInfoBtn.disabled = false;
@@ -1138,6 +1150,9 @@ async function markItemsByUploadResult(payload, localFiles) {
         }
         item.locationInfo = img.locationInfoJson ? JSON.parse(img.locationInfoJson) : null;
       }
+
+      // Apply image analysis result from upload response
+      item.imageAnalysis = img.imageAnalysis || null;
 
       continue;
     }
@@ -1584,6 +1599,7 @@ async function restoreRoute(routeId) {
         mimeType: image.mimeType, thumbUrl, timestamp: image.capturedAt || image.createdAt,
         isVideo,
         mapUrl, locationInfo: image.locationInfoJson ? JSON.parse(image.locationInfoJson) : null,
+        imageAnalysis: image.imageAnalysis || null,
         userNote: image.userNote || "", noteSaved: true,
         noteStatus: image.userNote ? "Saved" : "No note",
         aiSummary: image.aiSummary || "", summaryGenerated: false,
@@ -1856,7 +1872,7 @@ async function addFiles(files) {
       originalFilename: file.name, byteSize: file.size,
       mimeType: file.type || "unknown", thumbUrl, timestamp,
       isVideo,
-      mapUrl: null, locationInfo: null,
+      mapUrl: null, locationInfo: null, imageAnalysis: null,
       userNote: "", noteSaved: false, noteStatus: "",
       aiSummary: "", summaryGenerated: false, summaryStatus: "", summaryLoading: false, translateLoading: false,
       videoUrl: "", videoLoading: false, videoStatus: "",

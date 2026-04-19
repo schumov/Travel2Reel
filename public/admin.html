@@ -220,6 +220,26 @@
       </div>
     </div>
 
+    <!-- Image Analysis API -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">🔬 Image Analysis API</span></div>
+      <div class="card-body">
+        <div id="analysis-url-alert" class="alert" hidden></div>
+        <p class="prompt-hint">
+          Endpoint that receives the image as a binary <code>multipart/form-data</code> field named <code>image</code>
+          and returns plain-text analysis. Called automatically on every image upload.
+        </p>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" for="analysis-url-input">API URL</label>
+          <input id="analysis-url-input" class="form-input" type="url"
+            placeholder="https://example.com/webhook/…" maxlength="500" />
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:10px">
+          <button id="analysis-url-save-btn" class="btn btn-primary">Save URL</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Users -->
     <div class="card">
       <div class="card-header">
@@ -265,6 +285,9 @@
     const promptSaveBtn  = $('prompt-save-btn');
     const promptResetBtn = $('prompt-reset-btn');
     const promptAlert    = $('prompt-alert');
+    const analysisUrlInput   = $('analysis-url-input');
+    const analysisUrlSaveBtn = $('analysis-url-save-btn');
+    const analysisUrlAlert   = $('analysis-url-alert');
     const usersTbody   = $('users-tbody');
     const usersAlert   = $('users-alert');
 
@@ -302,6 +325,7 @@
       logoutBtn.hidden  = false;
       loadSettings();
       loadPrompt();
+      loadAnalysisUrl();
       loadUsers();
     }
 
@@ -420,6 +444,37 @@
         }
       } finally {
         promptResetBtn.disabled = false;
+      }
+    });
+
+    // ── Image Analysis URL ───────────────────────────────────────────────────
+    async function loadAnalysisUrl() {
+      const res = await fetch('/admin/api/image-analysis-url');
+      if (!res.ok) return;
+      const data = await res.json();
+      analysisUrlInput.value = data.value;
+    }
+
+    analysisUrlSaveBtn.addEventListener('click', async () => {
+      const value = analysisUrlInput.value.trim();
+      if (!value) { showAlert(analysisUrlAlert, 'URL cannot be empty.', 'error'); return; }
+      analysisUrlSaveBtn.disabled = true;
+      analysisUrlSaveBtn.innerHTML = '<span class="spin"></span> Saving…';
+      try {
+        const res = await fetch('/admin/api/image-analysis-url', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value })
+        });
+        if (res.ok) {
+          showAlert(analysisUrlAlert, 'API URL saved.', 'success');
+        } else {
+          const d = await res.json();
+          showAlert(analysisUrlAlert, d.error || 'Failed to save URL.', 'error');
+        }
+      } finally {
+        analysisUrlSaveBtn.disabled = false;
+        analysisUrlSaveBtn.textContent = 'Save URL';
       }
     });
 

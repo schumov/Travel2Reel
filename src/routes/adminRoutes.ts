@@ -5,6 +5,7 @@ import { prisma } from "../db/client";
 import { env } from "../config/env";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { DEFAULT_CAPTION_PROMPT } from "../services/claudeAiService";
+import { DEFAULT_IMAGE_ANALYSIS_URL } from "../services/imageAnalysisService";
 
 const adminRouter = Router();
 const storageRoot = path.join(process.cwd(), "storage");
@@ -121,6 +122,40 @@ adminRouter.delete("/api/prompt", requireAdmin, async (_req: Request, res: Respo
   try {
     await prisma.appSetting.deleteMany({ where: { key: "caption_prompt" } });
     res.status(200).json({ ok: true, value: DEFAULT_CAPTION_PROMPT });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── Image Analysis URL ───────────────────────────────────────────────────────
+
+adminRouter.get("/api/image-analysis-url", requireAdmin, async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const row = await prisma.appSetting.findUnique({ where: { key: "image_analysis_api_url" } });
+    res.status(200).json({ value: row?.value ?? DEFAULT_IMAGE_ANALYSIS_URL, isCustom: !!row });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.patch("/api/image-analysis-url", requireAdmin, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { value } = req.body as { value?: string };
+    if (typeof value !== "string" || value.trim().length === 0) {
+      res.status(400).json({ error: "URL cannot be empty" });
+      return;
+    }
+    if (value.trim().length > 500) {
+      res.status(400).json({ error: "URL too long (max 500 characters)" });
+      return;
+    }
+    const trimmed = value.trim();
+    await prisma.appSetting.upsert({
+      where: { key: "image_analysis_api_url" },
+      update: { value: trimmed },
+      create: { key: "image_analysis_api_url", value: trimmed }
+    });
+    res.status(200).json({ ok: true });
   } catch (error) {
     next(error);
   }
