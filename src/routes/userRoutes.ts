@@ -1159,10 +1159,31 @@ userRouter.post(
       const routeId = normalizeRouteId(req);
       const routeSession = await loadOwnedRouteSession(req.user!.id, routeId);
 
-      // Collect video URLs from images in their stored order
-      const videoUrls: string[] = routeSession.images
-        .filter((img: any) => img.videoUrl && img.videoUrl.trim())
-        .map((img: any) => img.videoUrl.trim() as string);
+      // Collect video URLs respecting the explicit order sent by the client (current UI order),
+      // falling back to DB order (orderIndex asc) when no imageIds are provided.
+      const requestedIds: string[] | null =
+        Array.isArray(req.body?.imageIds) && req.body.imageIds.length > 0
+          ? req.body.imageIds.map((id: unknown) => String(id))
+          : null;
+
+      const imagesWithVideo = routeSession.images.filter(
+        (img: any) => img.videoUrl && img.videoUrl.trim()
+      );
+
+      let videoUrls: string[];
+      if (requestedIds) {
+        // Build a map for O(1) lookup
+        const imageMap = new Map(
+          imagesWithVideo.map((img: any) => [img.id, img.videoUrl.trim() as string])
+        );
+        // Keep only IDs that belong to this session and have a video, in the requested order
+        videoUrls = requestedIds
+          .filter(id => imageMap.has(id))
+          .map(id => imageMap.get(id)!);
+      } else {
+        // Fall back to DB order
+        videoUrls = imagesWithVideo.map((img: any) => img.videoUrl.trim() as string);
+      }
 
       if (videoUrls.length < 2) {
         throw new HttpError(

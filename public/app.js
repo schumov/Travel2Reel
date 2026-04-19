@@ -1419,6 +1419,11 @@ async function combineVideos() {
   const transition = elements.combineTransitionSelect.value;
   const transitionDuration = parseFloat(elements.combineTransitionDuration.value) || 0.5;
 
+  // Collect video-ready items in their current UI order
+  const orderedVideoIds = state.items
+    .filter(i => i.serverImageId && i.videoUrl?.trim())
+    .map(i => i.serverImageId);
+
   state.combineVideoLoading = true;
   state.combineVideoStatus = "";
   refreshCombineVideoState();
@@ -1429,7 +1434,7 @@ async function combineVideos() {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transition, transitionDuration })
+        body: JSON.stringify({ transition, transitionDuration, imageIds: orderedVideoIds })
       }
     );
     if (!response.ok) {
