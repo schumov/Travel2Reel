@@ -18,6 +18,7 @@ import {
 } from "../services/storageService";
 import { processImage } from "../services/imageService";
 import { generateImageSummary, translateText, type TranslationLanguage } from "../services/claudeAiService";
+import { analyzeImage, DEFAULT_IMAGE_ANALYSIS_URL } from "../services/imageAnalysisService";
 import { isClaudeAiConfigured, isVideoGenConfigured, env } from "../config/env";
 import { HttpError } from "../utils/validators";
 import { extractVideoThumbnail } from "../services/videoThumbnailService";
@@ -56,6 +57,8 @@ async function videoGenFetch(endpoint: string, init: RequestInit): Promise<globa
   console[level](`[video-gen] <-- ${response.status} ${response.statusText}  (${elapsed} ms)  ${url}`);
   return response;
 }
+const VALID_VIDEO_EFFECTS = ["none", "zoom-in", "zoom-out", "pan-left", "pan-right", "ken-burns", "shake"] as const;
+
 const ASSET_TYPE = {
   ORIGINAL_IMAGE: "ORIGINAL_IMAGE",
   IMAGE_MAP: "IMAGE_MAP",
@@ -339,16 +342,28 @@ userRouter.post(
           const gps = await tryExtractGpsCoordinates(file.buffer);
           const exifPayload = await exifr.parse(file.buffer).catch(() => null);
 
-          const locationInfo = gps
-            ? await fetchLocationInfo(gps).catch(() => ({ gps, displayName: "Unknown location" }))
-            : null;
-
           const capturedDate = exifPayload && (exifPayload as { DateTimeOriginal?: Date; CreateDate?: Date }).DateTimeOriginal
             ? (exifPayload as { DateTimeOriginal?: Date }).DateTimeOriginal
             : exifPayload && (exifPayload as { CreateDate?: Date }).CreateDate
               ? (exifPayload as { CreateDate?: Date }).CreateDate
               : null;
 
+          // Fetch settings once for both analysis URL and caption prompt
+          const [analysisSetting, promptSetting] = await Promise.all([
+            prisma.appSetting.findUnique({ where: { key: "image_analysis_api_url" } }),
+            prisma.appSetting.findUnique({ where: { key: "caption_prompt" } })
+          ]);
+          const analysisApiUrl = analysisSetting?.value ?? DEFAULT_IMAGE_ANALYSIS_URL;
+
+          // Phase 1 — parallel: location info + image analysis (neither needs a DB record yet)
+          const [locationInfo, imageAnalysis] = await Promise.all([
+            gps
+              ? fetchLocationInfo(gps).catch(() => ({ gps, displayName: "Unknown location" }))
+              : Promise.resolve(null),
+            analyzeImage(processed.buffer, processedMimeType, analysisApiUrl)
+          ]);
+
+          // Create DB record with all available context from phase 1
           const createdImage = await prisma.routeImage.create({
             data: {
               routeSessionId: routeSession.id,
@@ -384,37 +399,100 @@ userRouter.post(
 
           const imageAssets: unknown[] = [{ ...originalAssetRow, url: assetUrl(originalAssetRow.id) }];
 
-          if (gps) {
-            const mapBuffer = await renderMapPng({
-              lat: gps.lat,
-              lng: gps.lng,
-              zoom: 13,
-              width: 460,
-              height: 280
-            });
+          // Phase 2 — parallel: map rendering + caption generation
+          // Both can run concurrently since they are independent of each other
+          const mapTask = gps
+            ? (async () => {
+                const mapBuffer = await renderMapPng({
+                  lat: gps.lat,
+                  lng: gps.lng,
+                  zoom: 13,
+                  width: 460,
+                  height: 280
+                });
+                const mapAsset = await saveAssetFile({
+                  routeSessionId: routeSession.id,
+                  assetType: ASSET_TYPE.IMAGE_MAP,
+                  mimeType: "image/png",
+                  buffer: mapBuffer
+                });
+                const mapAssetRow = await prisma.routeAsset.create({
+                  data: {
+                    routeSessionId: routeSession.id,
+                    routeImageId: createdImage.id,
+                    assetType: ASSET_TYPE.IMAGE_MAP,
+                    storagePath: mapAsset.relativePath,
+                    byteSize: mapAsset.byteSize,
+                    sha256: mapAsset.sha256
+                  }
+                });
+                return mapAssetRow;
+              })().catch(() => null)
+            : Promise.resolve(null);
 
-            const mapAsset = await saveAssetFile({
-              routeSessionId: routeSession.id,
-              assetType: ASSET_TYPE.IMAGE_MAP,
-              mimeType: "image/png",
-              buffer: mapBuffer
-            });
+          const captionTask = isClaudeAiConfigured
+            ? generateImageSummary({
+                userNote: notesByIndex[fileIndex] || null,
+                locationInfo,
+                originalFilename: file.originalname,
+                imageAnalysis
+              }, promptSetting?.value ?? undefined).catch(() => null)
+            : Promise.resolve(null);
 
-            const mapAssetRow = await prisma.routeAsset.create({
-              data: {
-                routeSessionId: routeSession.id,
-                routeImageId: createdImage.id,
-                assetType: ASSET_TYPE.IMAGE_MAP,
-                storagePath: mapAsset.relativePath,
-                byteSize: mapAsset.byteSize,
-                sha256: mapAsset.sha256
-              }
-            });
+          const [mapAssetRow, aiSummary] = await Promise.all([mapTask, captionTask]);
 
+          if (mapAssetRow) {
             imageAssets.push({ ...mapAssetRow, url: assetUrl(mapAssetRow.id) });
           }
 
-          uploadedImages.push({ image: createdImage, assets: imageAssets });
+          // Single DB update with analysis result and generated captions
+          let finalImage: typeof createdImage = (imageAnalysis !== null || aiSummary !== null)
+            ? await prisma.routeImage.update({
+                where: { id: createdImage.id },
+                data: {
+                  ...(imageAnalysis !== null ? { imageAnalysis } : {}),
+                  ...(aiSummary !== null ? { aiSummary } : {})
+                }
+              })
+            : createdImage;
+
+          // Phase 3 — auto-generate video if service is configured and a caption is available
+          if (isVideoGenConfigured && aiSummary) {
+            try {
+              const randomEffect = VALID_VIDEO_EFFECTS[Math.floor(Math.random() * VALID_VIDEO_EFFECTS.length)];
+              const videoFormData = new FormData();
+              const imageBlob = new Blob([new Uint8Array(processed.buffer.buffer as ArrayBuffer, processed.buffer.byteOffset, processed.buffer.byteLength)], { type: processedMimeType });
+              videoFormData.append("image", imageBlob, file.originalname);
+              videoFormData.append("text", aiSummary.trim());
+              videoFormData.append("effect", randomEffect);
+              videoFormData.append("captionPosition", "bottom");
+              videoFormData.append("captionStyle", "word-by-word");
+              videoFormData.append("fontSize", "10");
+
+              const videoResponse = await videoGenFetch("/generate", {
+                method: "POST",
+                body: videoFormData,
+                headers: env.VIDEO_GEN_API_TOKEN ? { token: env.VIDEO_GEN_API_TOKEN } : {},
+                signal: AbortSignal.timeout(120_000)
+              });
+
+              if (videoResponse.ok) {
+                const videoPayload = await videoResponse.json() as { success: boolean; url: string };
+                if (videoPayload.success && videoPayload.url) {
+                  finalImage = await prisma.routeImage.update({
+                    where: { id: createdImage.id },
+                    data: { videoUrl: videoPayload.url }
+                  });
+                }
+              } else {
+                console.warn(`[upload] Auto-video generation failed for ${file.originalname}: ${videoResponse.status}`);
+              }
+            } catch (videoErr) {
+              console.warn(`[upload] Auto-video generation error for ${file.originalname}:`, videoErr);
+            }
+          }
+
+          uploadedImages.push({ image: finalImage, assets: imageAssets });
 
           orderIndex += 1;
         } catch (error) {
@@ -812,12 +890,14 @@ userRouter.post(
         }
       }
 
-      // Generate summary using Claude AI
+      // Generate summary using Claude AI — use custom prompt from DB if set
+      const promptSetting = await prisma.appSetting.findUnique({ where: { key: "caption_prompt" } });
       const summary = await generateImageSummary({
         userNote: image.userNote,
         locationInfo,
-        originalFilename: image.originalFilename
-      });
+        originalFilename: image.originalFilename,
+        imageAnalysis: (image as any).imageAnalysis ?? null
+      }, promptSetting?.value ?? undefined);
 
       // Save summary to database
       const updatedImage = await prisma.routeImage.update({
@@ -1010,9 +1090,8 @@ userRouter.post(
       // Build multipart form and call the external video-gen API
       console.log("[video] received body:", JSON.stringify(req.body));
 
-      const VALID_EFFECTS = ["none", "zoom-in", "zoom-out", "pan-left", "pan-right", "ken-burns", "shake"];
       const rawEffect = typeof req.body?.effect === "string" ? req.body.effect.trim() : "none";
-      const effect = VALID_EFFECTS.includes(rawEffect) ? rawEffect : "none";
+      const effect = VALID_VIDEO_EFFECTS.includes(rawEffect as any) ? rawEffect : "none";
 
       const VALID_CAPTION_POSITIONS = ["top", "center", "bottom"];
       const rawCaption = typeof req.body?.captionPosition === "string" ? req.body.captionPosition.trim() : "bottom";
@@ -1080,10 +1159,31 @@ userRouter.post(
       const routeId = normalizeRouteId(req);
       const routeSession = await loadOwnedRouteSession(req.user!.id, routeId);
 
-      // Collect video URLs from images in their stored order
-      const videoUrls: string[] = routeSession.images
-        .filter((img: any) => img.videoUrl && img.videoUrl.trim())
-        .map((img: any) => img.videoUrl.trim() as string);
+      // Collect video URLs respecting the explicit order sent by the client (current UI order),
+      // falling back to DB order (orderIndex asc) when no imageIds are provided.
+      const requestedIds: string[] | null =
+        Array.isArray(req.body?.imageIds) && req.body.imageIds.length > 0
+          ? req.body.imageIds.map((id: unknown) => String(id))
+          : null;
+
+      const imagesWithVideo = routeSession.images.filter(
+        (img: any) => img.videoUrl && img.videoUrl.trim()
+      );
+
+      let videoUrls: string[];
+      if (requestedIds) {
+        // Build a map for O(1) lookup
+        const imageMap = new Map(
+          imagesWithVideo.map((img: any) => [img.id, img.videoUrl.trim() as string])
+        );
+        // Keep only IDs that belong to this session and have a video, in the requested order
+        videoUrls = requestedIds
+          .filter(id => imageMap.has(id))
+          .map(id => imageMap.get(id)!);
+      } else {
+        // Fall back to DB order
+        videoUrls = imagesWithVideo.map((img: any) => img.videoUrl.trim() as string);
+      }
 
       if (videoUrls.length < 2) {
         throw new HttpError(
@@ -1299,10 +1399,9 @@ userRouter.post(
       formData.append("video", blob, `source${ext || ".mp4"}`);
       formData.append("text", image.aiSummary.trim());
 
-      const VALID_EFFECTS_V = ["none", "zoom-in", "zoom-out", "pan-left", "pan-right", "ken-burns", "shake"];
       console.log("[video-from-video] received body:", JSON.stringify(req.body));
       const rawEffectV = typeof req.body?.effect === "string" ? req.body.effect.trim() : "none";
-      formData.append("effect", VALID_EFFECTS_V.includes(rawEffectV) ? rawEffectV : "none");
+      formData.append("effect", VALID_VIDEO_EFFECTS.includes(rawEffectV as any) ? rawEffectV : "none");
 
       const VALID_POSITIONS_V = ["top", "center", "bottom"];
       const rawPositionV = typeof req.body?.captionPosition === "string" ? req.body.captionPosition.trim() : "bottom";

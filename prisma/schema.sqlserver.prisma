@@ -61,6 +61,7 @@ model RouteImage {
   locationInfoJson String?
   userNote         String?
   aiSummary        String?
+  imageAnalysis    String?
   videoUrl         String?
   hasSourceVideo   Boolean     @default(false)
   createdAt        DateTime    @default(now())

@@ -313,7 +313,7 @@
               <div class="video-gen-option">
                 <label class="option-label" for="edit-video-font-size-input">Font size</label>
                 <input id="edit-video-font-size-input" type="number" class="input-sm"
-                  placeholder="default" min="8" max="120" step="1" style="width:72px" />
+                  placeholder="default" min="8" max="120" step="1" style="width:72px" value="10" />
               </div>
               <button id="edit-generate-video-btn" class="btn btn-secondary">&#127916; Generate video</button>
               <span id="edit-video-state" class="status-chip"></span>
@@ -342,6 +342,10 @@
               <button id="edit-cancel-location-btn" class="btn btn-ghost">Cancel</button>
             </div>
           </div>
+
+          <h2 class="section-heading" style="margin-top:18px">Image Analysis</h2>
+          <div id="edit-analysis-placeholder" class="info-placeholder">Not analyzed yet.</div>
+          <p id="edit-analysis-content" style="font-size:0.88rem;line-height:1.55;white-space:pre-wrap" hidden></p>
         </div>
 
       </div>

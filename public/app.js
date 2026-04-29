@@ -99,6 +99,8 @@ const elements = {
   editLocationCoords:       document.getElementById("edit-location-coords"),
   editSaveLocationBtn:      document.getElementById("edit-save-location-btn"),
   editCancelLocationBtn:    document.getElementById("edit-cancel-location-btn"),
+  editAnalysisContent:      document.getElementById("edit-analysis-content"),
+  editAnalysisPlaceholder:  document.getElementById("edit-analysis-placeholder"),
   // Auth-gated panels
   welcomeScreen:            document.getElementById("welcome-screen"),
   editPanel:                document.getElementById("edit-panel")
@@ -247,45 +249,24 @@ function markRouteStale() {
 //  UNSAVED CHANGES 
 
 function updateSaveBtn() {
-  const hasNewFiles = state.items.some(i => i.file && i.persisted !== true);
   const hasUnsavedNotes = state.items.some(i => i.persisted === true && i.serverImageId && !i.noteSaved);
-  const visible = hasNewFiles || hasUnsavedNotes || state.dirty;
-  elements.saveChangesBtn.hidden = !visible;
-  if (visible) {
-    const fileCount = state.items.filter(i => i.file && i.persisted !== true).length;
+  elements.saveChangesBtn.hidden = !hasUnsavedNotes;
+  if (hasUnsavedNotes) {
     const noteCount = state.items.filter(i => i.persisted === true && i.serverImageId && !i.noteSaved).length;
-    let label;
-    if (fileCount > 0 && noteCount > 0) {
-      label = `\u{1F4BE} Save ${fileCount} photo${fileCount !== 1 ? "s" : ""} + ${noteCount} note${noteCount !== 1 ? "s" : ""}`;
-    } else if (fileCount > 0) {
-      label = `\u{1F4BE} Save ${fileCount} photo${fileCount !== 1 ? "s" : ""}`;
-    } else if (noteCount > 0) {
-      label = `\u{1F4BE} Save ${noteCount} note${noteCount !== 1 ? "s" : ""}`;
-    } else {
-      label = "\u{1F4BE} Save changes";
-    }
-    elements.saveChangesBtn.textContent = label;
+    elements.saveChangesBtn.textContent = `\u{1F4BE} Save ${noteCount} note${noteCount !== 1 ? "s" : ""}`;
   }
 }
 
 async function saveChanges() {
-  if (!state.auth.authenticated) { updateStatus("Sign in to save photos to a route."); return; }
-  if (!state.activeRouteSessionId) { updateStatus("Create or load a route session first."); return; }
-  const unpersisted = state.items.filter(i => i.file && i.persisted !== true).map(i => i.file);
+  if (!state.auth.authenticated) { updateStatus("Sign in to save."); return; }
+  if (!state.activeRouteSessionId) { updateStatus("No active route."); return; }
   const unsavedNoteItems = state.items.filter(i => i.persisted === true && i.serverImageId && !i.noteSaved);
-  if (unpersisted.length === 0 && unsavedNoteItems.length === 0 && !state.dirty) { updateStatus("Nothing to save."); return; }
+  if (unsavedNoteItems.length === 0) { updateStatus("Nothing to save."); return; }
   elements.saveChangesBtn.disabled = true;
-  if (unpersisted.length > 0) {
-    updateStatus(`Saving ${unpersisted.length} photo(s)…`);
-    await persistFilesToActiveSession(unpersisted);
+  updateStatus(`Saving ${unsavedNoteItems.length} note(s)…`);
+  for (const item of unsavedNoteItems) {
+    await saveNoteForItem(item.id);
   }
-  if (unsavedNoteItems.length > 0) {
-    updateStatus(`Saving ${unsavedNoteItems.length} note(s)…`);
-    for (const item of unsavedNoteItems) {
-      await saveNoteForItem(item.id);
-    }
-  }
-  state.dirty = false;
   elements.saveChangesBtn.disabled = false;
   updateSaveBtn();
 }
@@ -742,6 +723,16 @@ function openEditPhoto(itemId) {
     elements.editInfoPlaceholder.hidden = false;
   }
 
+  // Image analysis (read-only)
+  if (item.imageAnalysis) {
+    elements.editAnalysisContent.textContent = item.imageAnalysis;
+    elements.editAnalysisContent.hidden = false;
+    elements.editAnalysisPlaceholder.hidden = true;
+  } else {
+    elements.editAnalysisContent.hidden = true;
+    elements.editAnalysisPlaceholder.hidden = false;
+  }
+
   // Map/info action buttons — always enabled; getItemImageBody() handles restored items
   elements.editMapBtn.disabled = false;
   elements.editInfoBtn.disabled = false;
@@ -1131,37 +1122,69 @@ window.addEventListener("hashchange", () => {
 
 //  PER-ITEM ACTIONS 
 
-function markItemsByUploadResult(payload, localFiles) {
+async function markItemsByUploadResult(payload, localFiles) {
+  // Build a map: filename → [{image, assets}] (queue for duplicates)
   const uploadedQueueByName = new Map();
   (payload.uploadedImages || []).forEach(entry => {
     const fileName = entry.image?.originalFilename;
     if (!fileName) return;
     if (!uploadedQueueByName.has(fileName)) uploadedQueueByName.set(fileName, []);
-    uploadedQueueByName.get(fileName).push(entry.image);
+    uploadedQueueByName.get(fileName).push(entry);
   });
 
   const failedMap = new Map((payload.failedImages || []).map(x => [x.filename, x.reason]));
 
-  localFiles.forEach(file => {
+  for (const file of localFiles) {
     const item = state.items.find(e => e.localFingerprint === fileFingerprint(file));
-    if (!item) return;
+    if (!item) continue;
     const queue = uploadedQueueByName.get(file.name);
     if (queue && queue.length > 0) {
-      const img = queue.shift();
-      item.persisted   = true;
+      const entry = queue.shift();
+      const img = entry.image;
+      const assets = entry.assets || [];
+
+      item.persisted     = true;
       item.serverImageId = img.id;
-      item.userNote    = img.userNote || item.userNote || "";
-      item.noteSaved   = true;
-      item.noteStatus  = img.userNote ? "Saved" : "No note";
-      item.message     = "Stored on server.";
-      item.messageType = "ok";
+      item.userNote      = img.userNote || item.userNote || "";
+      item.noteSaved     = true;
+      item.noteStatus    = img.userNote ? "Saved" : "No note";
+      item.message       = "Stored on server.";
+      item.messageType   = "ok";
+
       if (img.isVideoItem) {
         item.isVideo = true;
         item.hasSourceVideo = true;
         item.sourceVideoFilename = item.originalFilename;
         item.sourceVideoStatus = "Uploaded";
       }
-      return;
+
+      // Apply GPS map and location info from upload response
+      const hasGps = Boolean(img.gpsLat && img.gpsLng);
+      item.hasGps = hasGps;
+      if (hasGps) {
+        const mapAsset = assets.find(a => a.assetType === "IMAGE_MAP");
+        if (mapAsset?.url) {
+          if (item.mapUrl?.startsWith("blob:")) URL.revokeObjectURL(item.mapUrl);
+          item.mapUrl = await fetchAssetAsBlobUrl(mapAsset.url).catch(() => null);
+        }
+        item.locationInfo = img.locationInfoJson ? JSON.parse(img.locationInfoJson) : null;
+      }
+
+      // Apply image analysis result from upload response
+      item.imageAnalysis = img.imageAnalysis || null;
+
+      // Apply AI-generated caption from upload response
+      if (img.aiSummary) {
+        item.aiSummary = img.aiSummary;
+      }
+
+      // Apply auto-generated video URL from upload response
+      if (img.videoUrl) {
+        item.videoUrl = img.videoUrl;
+        item.videoStatus = "Ready";
+      }
+
+      continue;
     }
     const reason = failedMap.get(file.name);
     if (reason) {
@@ -1171,7 +1194,7 @@ function markItemsByUploadResult(payload, localFiles) {
       item.message     = `Upload failed: ${reason}`;
       item.messageType = "warn";
     }
-  });
+  }
 }
 
 async function saveNoteForItem(itemId) {
@@ -1415,6 +1438,11 @@ async function combineVideos() {
   const transition = elements.combineTransitionSelect.value;
   const transitionDuration = parseFloat(elements.combineTransitionDuration.value) || 0.5;
 
+  // Collect video-ready items in their current UI order
+  const orderedVideoIds = state.items
+    .filter(i => i.serverImageId && i.videoUrl?.trim())
+    .map(i => i.serverImageId);
+
   state.combineVideoLoading = true;
   state.combineVideoStatus = "";
   refreshCombineVideoState();
@@ -1425,7 +1453,7 @@ async function combineVideos() {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transition, transitionDuration })
+        body: JSON.stringify({ transition, transitionDuration, imageIds: orderedVideoIds })
       }
     );
     if (!response.ok) {
@@ -1499,6 +1527,32 @@ async function startRouteSession() {
   }
 }
 
+async function ensureActiveRoute() {
+  if (!state.auth.authenticated) {
+    updateStatus("Sign in to upload photos.");
+    return false;
+  }
+  if (state.activeRouteSessionId) return true;
+  updateStatus("Creating a new route…");
+  try {
+    const title = `Route ${new Date().toLocaleDateString("en-GB")}`;
+    const response = await fetch("/api/user/routes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title })
+    });
+    if (!response.ok) { updateStatus("Could not create route session."); return false; }
+    const payload = await response.json();
+    state.activeRouteSessionId = payload.routeSession.id;
+    updateAuthUi();
+    await loadSavedRoutes();
+    return true;
+  } catch {
+    updateStatus("Network error creating route.");
+    return false;
+  }
+}
+
 async function persistFilesToActiveSession(localFiles) {
   if (!state.auth.authenticated || !state.activeRouteSessionId || localFiles.length === 0) return;
 
@@ -1526,7 +1580,7 @@ async function persistFilesToActiveSession(localFiles) {
       renderPhotoList();
       return;
     }
-    markItemsByUploadResult(payload, localFiles);
+    await markItemsByUploadResult(payload, localFiles);
     renderPhotoList();
     if (response.status === HTTP_PARTIAL || (payload.failed || 0) > 0) {
       updateStatus(`Partial upload: ${payload.added || 0} stored, ${payload.failed || 0} failed.`);
@@ -1580,6 +1634,7 @@ async function restoreRoute(routeId) {
         mimeType: image.mimeType, thumbUrl, timestamp: image.capturedAt || image.createdAt,
         isVideo,
         mapUrl, locationInfo: image.locationInfoJson ? JSON.parse(image.locationInfoJson) : null,
+        imageAnalysis: image.imageAnalysis || null,
         userNote: image.userNote || "", noteSaved: true,
         noteStatus: image.userNote ? "Saved" : "No note",
         aiSummary: image.aiSummary || "", summaryGenerated: false,
@@ -1852,7 +1907,7 @@ async function addFiles(files) {
       originalFilename: file.name, byteSize: file.size,
       mimeType: file.type || "unknown", thumbUrl, timestamp,
       isVideo,
-      mapUrl: null, locationInfo: null,
+      mapUrl: null, locationInfo: null, imageAnalysis: null,
       userNote: "", noteSaved: false, noteStatus: "",
       aiSummary: "", summaryGenerated: false, summaryStatus: "", summaryLoading: false, translateLoading: false,
       videoUrl: "", videoLoading: false, videoStatus: "",
@@ -1866,8 +1921,10 @@ async function addFiles(files) {
   state.items.sort((a, b) => a.timestamp - b.timestamp);
   markRouteStale();
   renderPhotoList();
-  updateStatus(`${state.items.length} photo(s) loaded (sorted oldest to newest).`);
-  await persistFilesToActiveSession(files);
+  updateStatus(`${state.items.length} photo(s) loaded — uploading…`);
+  if (await ensureActiveRoute()) {
+    await persistFilesToActiveSession(files);
+  }
 }
 
 //  EVENT LISTENERS 
