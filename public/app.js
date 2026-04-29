@@ -37,6 +37,13 @@ const elements = {
   combineVideoState:  document.getElementById("combine-video-state"),
   combineVideoSection: document.getElementById("combined-video-section"),
   combineVideoLink:   document.getElementById("combined-video-link"),
+  instagramShareBtn:  document.getElementById("instagram-share-btn"),
+  instagramModal:     document.getElementById("instagram-modal"),
+  instagramModalClose: document.getElementById("instagram-modal-close"),
+  instagramDownloadLink: document.getElementById("instagram-download-link"),
+  instagramCaption:   document.getElementById("instagram-caption"),
+  instagramCopyCaption: document.getElementById("instagram-copy-caption"),
+  settingsLink:       document.getElementById("settings-link"),
   confirmBackdrop:    document.getElementById("confirm-dialog-backdrop"),
   confirmMessage:     document.getElementById("confirm-dialog-message"),
   confirmOk:          document.getElementById("confirm-dialog-ok"),
@@ -286,6 +293,8 @@ async function saveChanges() {
 function updateAuthUi() {
   if (!state.auth.authenticated) {
     elements.authState.textContent = "Not signed in";
+    elements.authState.hidden = false;
+    elements.settingsLink.hidden = true;
     elements.loginLink.hidden = false;
     elements.guestLoginBtn.hidden = false;
     elements.logoutBtn.hidden = true;
@@ -308,6 +317,14 @@ function updateAuthUi() {
   elements.loginLink.hidden = true;
   elements.guestLoginBtn.hidden = true;
   elements.logoutBtn.hidden = false;
+  if (!state.auth.guest && state.auth.user) {
+    elements.settingsLink.textContent = name;
+    elements.settingsLink.hidden = false;
+    elements.authState.hidden = true;
+  } else {
+    elements.settingsLink.hidden = true;
+    elements.authState.hidden = false;
+  }
   elements.newSessionBtn.hidden = false;
   elements.reloadRoutesBtn.hidden = false;
 
@@ -972,8 +989,10 @@ function refreshCombineVideoState() {
   if (state.combineVideoUrl) {
     elements.combineVideoLink.href = state.combineVideoUrl;
     elements.combineVideoLink.hidden = false;
+    elements.instagramShareBtn.hidden = false;
   } else {
     elements.combineVideoLink.hidden = true;
+    elements.instagramShareBtn.hidden = true;
   }
 }
 
@@ -2022,7 +2041,48 @@ elements.editSaveLocationBtn.addEventListener("click", async () => {
   }
 });
 
-//  INIT 
+// ── INSTAGRAM SHARE MODAL ────────────────────────────────────────────────────
+
+elements.instagramShareBtn.addEventListener("click", () => {
+  const videoUrl = state.combineVideoUrl;
+  if (!videoUrl) return;
+  elements.instagramDownloadLink.href = videoUrl;
+
+  // Pre-fill caption from route title + photo summaries
+  const route = state.savedRoutes.find(r => r.id === state.activeRouteSessionId);
+  const title = route?.title || "My Travel Reel";
+  const summaries = state.items
+    .filter(i => i.aiSummary)
+    .map(i => i.aiSummary.trim())
+    .slice(0, 3)
+    .join(" • ");
+  elements.instagramCaption.value = summaries
+    ? `${title}\n\n${summaries}\n\n#travel #travelvideo #reel`
+    : `${title}\n\n#travel #travelvideo #reel`;
+
+  elements.instagramModal.hidden = false;
+});
+
+elements.instagramModalClose.addEventListener("click", () => {
+  elements.instagramModal.hidden = true;
+});
+
+elements.instagramModal.addEventListener("click", (e) => {
+  if (e.target === elements.instagramModal) elements.instagramModal.hidden = true;
+});
+
+elements.instagramCopyCaption.addEventListener("click", async () => {
+  const text = elements.instagramCaption.value;
+  try {
+    await navigator.clipboard.writeText(text);
+    elements.instagramCopyCaption.textContent = "✓ Copied!";
+    setTimeout(() => { elements.instagramCopyCaption.textContent = "📋 Copy caption"; }, 2000);
+  } catch {
+    elements.instagramCaption.select();
+  }
+});
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
 
 renderPhotoList();
 refreshAuth().then(loadSavedRoutes);

@@ -17,6 +17,7 @@
     <span class="nav-brand">Travel2Reel</span>
     <div class="nav-auth">
       <span id="auth-state" class="nav-auth-label">Not signed in</span>
+      <a id="settings-link" class="nav-settings-link" href="/settings" hidden></a>
       <a id="login-link" class="btn btn-primary" href="/auth/google">Sign in with Google</a>
       <button id="guest-login-btn" class="btn btn-secondary">Continue as Guest</button>
       <button id="logout-btn" class="btn btn-ghost" hidden>Logout</button>
@@ -149,6 +150,31 @@
               </div>
               <div id="combined-video-section" class="video-route-result" hidden>
                 <a id="combined-video-link" class="video-result-link" href="#" target="_blank" rel="noopener noreferrer" hidden>&#9654; Watch combined video</a>
+                <button id="instagram-share-btn" class="btn btn-secondary" hidden>&#128247; Share to Instagram</button>
+              </div>
+
+              <!-- INSTAGRAM SHARE MODAL -->
+              <div id="instagram-modal" class="modal-overlay" hidden>
+                <div class="modal-box">
+                  <div class="modal-header">
+                    <h3 class="modal-title">Share to Instagram</h3>
+                    <button id="instagram-modal-close" class="btn btn-ghost modal-close-btn">&#10005;</button>
+                  </div>
+                  <div class="modal-body">
+                    <p class="modal-hint">Instagram doesn't allow direct upload from web apps. Follow these steps:</p>
+                    <ol class="share-steps">
+                      <li><a id="instagram-download-link" class="btn btn-primary" href="#" download="travel2reel.mp4">&#11015; Download video</a></li>
+                      <li>Open Instagram and create a new Reel or Story</li>
+                      <li>Select the downloaded video from your device</li>
+                    </ol>
+                    <div class="modal-caption-section">
+                      <label class="modal-label">Suggested caption</label>
+                      <textarea id="instagram-caption" class="modal-textarea" rows="4" placeholder="Add a caption…"></textarea>
+                      <button id="instagram-copy-caption" class="btn btn-secondary btn-sm">&#128203; Copy caption</button>
+                    </div>
+                    <a href="https://www.instagram.com" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-full">Open Instagram &#8599;</a>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

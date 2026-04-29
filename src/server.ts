@@ -39,6 +39,10 @@ app.get("/admin", (_req: Request, res: Response) => {
   res.sendFile(path.join(publicDir, "admin.html"));
 });
 
+app.get("/settings", (_req: Request, res: Response) => {
+  res.sendFile(path.join(publicDir, "settings.html"));
+});
+
 app.get("/api/openapi.json", (_req: Request, res: Response) => {
   res.status(200).json(openApiDocument);
 });
