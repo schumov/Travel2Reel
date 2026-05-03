@@ -1104,7 +1104,11 @@ userRouter.post(
       const rawFontSize = Number(req.body?.fontSize);
       const fontSize = Number.isInteger(rawFontSize) && rawFontSize >= 8 && rawFontSize <= 120 ? rawFontSize : null;
 
-      console.log("[video] resolved params:", { effect, captionPosition, captionStyle, fontSize });
+      const VALID_FONT_NAMES = ["Arial", "Arial Black", "Bahnschrift", "Calibri", "Candara", "Comic Sans MS", "Consolas", "Courier New", "Georgia", "Impact", "Palatino Linotype", "Segoe UI", "Tahoma", "Times New Roman", "Trebuchet MS", "Verdana"];
+      const rawFontName = typeof req.body?.fontName === "string" ? req.body.fontName.trim() : "";
+      const fontName = VALID_FONT_NAMES.includes(rawFontName) ? rawFontName : null;
+
+      console.log("[video] resolved params:", { effect, captionPosition, captionStyle, fontSize, fontName });
 
       const formData = new FormData();
       const blob = new Blob([imageBuffer], { type: image.mimeType || "image/jpeg" });
@@ -1115,6 +1119,7 @@ userRouter.post(
       formData.append("captionStyle", captionStyle);
       if (fontSize !== null) formData.append("fontSize", String(fontSize))
         else formData.append("fontSize", "10");
+      if (fontName !== null) formData.append("fontName", fontName);
 
       const videoResponse = await videoGenFetch("/generate", {
         method: "POST",
@@ -1414,6 +1419,11 @@ userRouter.post(
       const rawFontSizeV = Number(req.body?.fontSize);
       const fontSizeV = Number.isInteger(rawFontSizeV) && rawFontSizeV >= 8 && rawFontSizeV <= 120 ? rawFontSizeV : null;
       if (fontSizeV !== null) formData.append("fontSize", String(fontSizeV));
+
+      const VALID_FONT_NAMES_V = ["Arial", "Arial Black", "Bahnschrift", "Calibri", "Candara", "Comic Sans MS", "Consolas", "Courier New", "Georgia", "Impact", "Palatino Linotype", "Segoe UI", "Tahoma", "Times New Roman", "Trebuchet MS", "Verdana"];
+      const rawFontNameV = typeof req.body?.fontName === "string" ? req.body.fontName.trim() : "";
+      const fontNameV = VALID_FONT_NAMES_V.includes(rawFontNameV) ? rawFontNameV : null;
+      if (fontNameV !== null) formData.append("fontName", fontNameV);
 
       const videoResponse = await videoGenFetch("/generate-video", {
         method: "POST",

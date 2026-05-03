@@ -80,6 +80,7 @@ const elements = {
   editVideoCaptionPositionSelect: document.getElementById("edit-video-caption-position-select"),
   editVideoCaptionStyleSelect: document.getElementById("edit-video-caption-style-select"),
   editVideoFontSizeInput:     document.getElementById("edit-video-font-size-input"),
+  editVideoFontNameSelect:    document.getElementById("edit-video-font-name-select"),
   editVideoState:           document.getElementById("edit-video-state"),
   editVideoSection:         document.getElementById("edit-video-section"),
   editVideoLink:            document.getElementById("edit-video-link"),
@@ -817,6 +818,7 @@ function refreshEditVideoState(item) {
   elements.editVideoCaptionPositionSelect.disabled = busy;
   elements.editVideoCaptionStyleSelect.disabled = busy;
   elements.editVideoFontSizeInput.disabled = busy;
+  elements.editVideoFontNameSelect.disabled = busy;
 
   elements.editGenerateVideoBtn.disabled = !canGenerate;
   elements.editGenerateVideoBtn.title = canGenerate ? "" : (!canAct ? "Upload first" : "Generate an AI summary first");
@@ -910,7 +912,7 @@ async function uploadSourceVideoForItem(itemId, file) {
   }
 }
 
-async function generateVideoFromVideoForItem(itemId, effect = "none", captionPosition = "bottom", captionStyle = "word-by-word", fontSize = null) {
+async function generateVideoFromVideoForItem(itemId, effect = "none", captionPosition = "bottom", captionStyle = "word-by-word", fontSize = null, fontName = null) {
   const item = state.items.find(e => e.id === itemId);
   if (!item || !state.activeRouteSessionId || !item.serverImageId) return;
   item.videoFromVideoLoading = true;
@@ -923,7 +925,7 @@ async function generateVideoFromVideoForItem(itemId, effect = "none", captionPos
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ effect, captionPosition, captionStyle, ...(fontSize ? { fontSize } : {}) })
+        body: JSON.stringify({ effect, captionPosition, captionStyle, ...(fontSize ? { fontSize } : {}), ...(fontName ? { fontName } : {}) })
       }
     );
     const payload = await response.json().catch(() => ({}));
@@ -1061,7 +1063,8 @@ elements.editGenerateVideoBtn.addEventListener("click", async () => {
   const captionPosition = elements.editVideoCaptionPositionSelect.value || "bottom";
   const captionStyle = elements.editVideoCaptionStyleSelect.value || "word-by-word";
   const fontSize = parseInt(elements.editVideoFontSizeInput.value, 10) || null;
-  await generateVideoForItem(item.id, effect, captionPosition, captionStyle, fontSize);
+  const fontName = elements.editVideoFontNameSelect.value || null;
+  await generateVideoForItem(item.id, effect, captionPosition, captionStyle, fontSize, fontName);
 });
 
 elements.editSourceVideoInput.addEventListener("change", async e => {
@@ -1281,13 +1284,13 @@ async function generateSummaryForItem(itemId) {
   }
 }
 
-async function generateVideoForItem(itemId, effect = "none", captionPosition = "bottom", captionStyle = "word-by-word", fontSize = null) {
+async function generateVideoForItem(itemId, effect = "none", captionPosition = "bottom", captionStyle = "word-by-word", fontSize = null, fontName = null) {
   const item = state.items.find(e => e.id === itemId);
   if (!item) return;
 
   // Video items have no source image — route directly to video-from-video
   if (item.isVideo) {
-    await generateVideoFromVideoForItem(itemId, effect, captionPosition, captionStyle, fontSize);
+    await generateVideoFromVideoForItem(itemId, effect, captionPosition, captionStyle, fontSize, fontName);
     return;
   }
 
@@ -1313,7 +1316,7 @@ async function generateVideoForItem(itemId, effect = "none", captionPosition = "
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ effect, captionPosition, captionStyle, ...(fontSize ? { fontSize } : {}) })
+        body: JSON.stringify({ effect, captionPosition, captionStyle, ...(fontSize ? { fontSize } : {}), ...(fontName ? { fontName } : {}) })
       }
     );
     if (!response.ok) {
